@@ -36,28 +36,28 @@ type NetConfig struct {
 func New(args *skel.CmdArgs) (*NetConfig, error) {
 	var config NetConfig
 	if err := json.Unmarshal(args.StdinData, &config); err != nil {
-		return nil, fmt.Errorf("Failed to parse network config: %v", err)
+		return nil, fmt.Errorf("failed to parse network config: %v", err)
 	}
 
 	// Validate if all the required fields are present.
 	if config.TrunkName == "" {
-		return nil, fmt.Errorf("Missing required parameter trunkName")
+		return nil, fmt.Errorf("missing required parameter trunkName")
 	}
 	if config.BranchVlanID == "" {
-		return nil, fmt.Errorf("Missing required parameter branchVlanID")
+		return nil, fmt.Errorf("missing required parameter branchVlanID")
 	}
 	if config.BranchMACAddress == "" {
-		return nil, fmt.Errorf("Missing required parameter branchMACAddress")
+		return nil, fmt.Errorf("missing required parameter branchMACAddress")
 	}
 
 	// Validate if the MAC address is valid.
 	if _, err := net.ParseMAC(config.BranchMACAddress); err != nil {
-		return nil, fmt.Errorf("Invalid branchMACAddress %s", config.BranchMACAddress)
+		return nil, fmt.Errorf("invalid branchMACAddress %s", config.BranchMACAddress)
 	}
 
 	// Validate if the IPv4 address is valid.
 	if _, _, err := net.ParseCIDR(config.BranchIPAddress); err != nil {
-		return nil, fmt.Errorf("Invalid branchIPAddress %s", config.BranchIPAddress)
+		return nil, fmt.Errorf("invalid branchIPAddress %s", config.BranchIPAddress)
 	}
 
 	// Validation complete. Return the parsed config object.

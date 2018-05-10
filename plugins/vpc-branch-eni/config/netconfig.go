@@ -27,31 +27,31 @@ import (
 type NetConfig struct {
 	cniTypes.NetConf
 	TrunkName        string `json:"trunkName"`
-	BranchMACAddress string `json:"branchMACAddress"`
 	BranchVlanID     string `json:"branchVlanID"`
+	BranchMACAddress string `json:"branchMACAddress"`
 }
 
 // New creates a new NetConfig object by parsing the given CNI arguments.
 func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	var config NetConfig
 	if err := json.Unmarshal(args.StdinData, &config); err != nil {
-		return nil, fmt.Errorf("Failed to parse network config: %v", err)
+		return nil, fmt.Errorf("failed to parse network config: %v", err)
 	}
 
 	// Validate if all the required fields are present.
 	if config.TrunkName == "" {
-		return nil, fmt.Errorf("Missing required parameter trunkName")
-	}
-	if config.BranchMACAddress == "" {
-		return nil, fmt.Errorf("Missing required parameter branchMACAddress")
+		return nil, fmt.Errorf("missing required parameter trunkName")
 	}
 	if config.BranchVlanID == "" {
-		return nil, fmt.Errorf("Missing required parameter branchVlanID")
+		return nil, fmt.Errorf("missing required parameter branchVlanID")
+	}
+	if config.BranchMACAddress == "" {
+		return nil, fmt.Errorf("missing required parameter branchMACAddress")
 	}
 
 	// Validate if the MAC address is valid.
 	if _, err := net.ParseMAC(config.BranchMACAddress); err != nil {
-		return nil, fmt.Errorf("Invalid branchMACAddress %s", config.BranchMACAddress)
+		return nil, fmt.Errorf("invalid branchMACAddress %s", config.BranchMACAddress)
 	}
 
 	// Validation complete. Return the parsed config object.
