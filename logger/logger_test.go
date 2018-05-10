@@ -35,7 +35,7 @@ func TestGetLogFilePathReturnsDefaultPath(t *testing.T) {
 }
 
 func TestLogLevelReturnsOverriddenLevel(t *testing.T) {
-	os.Setenv(envLogLevel, "DEBUG")
+	os.Setenv(envLogLevel, "debug")
 	defer os.Unsetenv(envLogLevel)
 
 	var expectedLogLevel log.LogLevel

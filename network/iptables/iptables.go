@@ -30,14 +30,22 @@ const (
 	mangle = "mangle"
 
 	// Built-in iptables chain names.
+	prerouting  = "PREROUTING"
 	input       = "INPUT"
 	forward     = "FORWARD"
 	output      = "OUTPUT"
-	prerouting  = "PREROUTING"
 	postrouting = "POSTROUTING"
 
 	// Default chain policy.
 	defaultPolicy = "ACCEPT"
+)
+
+const (
+	idxPrerouting  = iota
+	idxInput       = iota
+	idxForward     = iota
+	idxOutput      = iota
+	idxPostrouting = iota
 )
 
 // Session represents an iptables session.
@@ -56,7 +64,7 @@ type Table struct {
 	Output      *Chain
 	Prerouting  *Chain
 	Postrouting *Chain
-	Chains      map[string]*Chain
+	Chains      [5]*Chain
 }
 
 // Chain represents an iptables chain, which contains an ordered set of rules.
@@ -82,45 +90,42 @@ func NewSession() (*Session, error) {
 	session := &Session{
 		restorePath: restorePath,
 		Filter: &Table{
-			name:   filter,
-			Chains: make(map[string]*Chain),
+			name: filter,
 		},
 		Nat: &Table{
-			name:   nat,
-			Chains: make(map[string]*Chain),
+			name: nat,
 		},
 		Mangle: &Table{
-			name:   mangle,
-			Chains: make(map[string]*Chain),
+			name: mangle,
 		},
 	}
 
 	session.Filter.Input, _ = NewChain(input)
 	session.Filter.Forward, _ = NewChain(forward)
 	session.Filter.Output, _ = NewChain(output)
-	session.Filter.Chains[input] = session.Filter.Input
-	session.Filter.Chains[forward] = session.Filter.Forward
-	session.Filter.Chains[output] = session.Filter.Output
+	session.Filter.Chains[idxInput] = session.Filter.Input
+	session.Filter.Chains[idxForward] = session.Filter.Forward
+	session.Filter.Chains[idxOutput] = session.Filter.Output
 
 	session.Nat.Prerouting, _ = NewChain(prerouting)
 	session.Nat.Input, _ = NewChain(input)
 	session.Nat.Output, _ = NewChain(output)
 	session.Nat.Postrouting, _ = NewChain(postrouting)
-	session.Nat.Chains[prerouting] = session.Nat.Prerouting
-	session.Nat.Chains[input] = session.Nat.Input
-	session.Nat.Chains[output] = session.Nat.Output
-	session.Nat.Chains[postrouting] = session.Nat.Postrouting
+	session.Nat.Chains[idxPrerouting] = session.Nat.Prerouting
+	session.Nat.Chains[idxInput] = session.Nat.Input
+	session.Nat.Chains[idxOutput] = session.Nat.Output
+	session.Nat.Chains[idxPostrouting] = session.Nat.Postrouting
 
 	session.Mangle.Prerouting, _ = NewChain(prerouting)
 	session.Mangle.Input, _ = NewChain(input)
 	session.Mangle.Forward, _ = NewChain(forward)
 	session.Mangle.Output, _ = NewChain(output)
 	session.Mangle.Postrouting, _ = NewChain(postrouting)
-	session.Mangle.Chains[prerouting] = session.Mangle.Prerouting
-	session.Mangle.Chains[input] = session.Mangle.Input
-	session.Mangle.Chains[forward] = session.Mangle.Forward
-	session.Mangle.Chains[output] = session.Mangle.Output
-	session.Mangle.Chains[postrouting] = session.Mangle.Postrouting
+	session.Mangle.Chains[idxPrerouting] = session.Mangle.Prerouting
+	session.Mangle.Chains[idxInput] = session.Mangle.Input
+	session.Mangle.Chains[idxForward] = session.Mangle.Forward
+	session.Mangle.Chains[idxOutput] = session.Mangle.Output
+	session.Mangle.Chains[idxPostrouting] = session.Mangle.Postrouting
 
 	return session, nil
 }

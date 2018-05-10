@@ -61,6 +61,7 @@ func TestAppend(t *testing.T) {
 COMMIT
 *nat
 :PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
 :OUTPUT ACCEPT [0:0]
 :POSTROUTING ACCEPT [0:0]
 -A POSTROUTING -s #{pat_bridge_interface_subnet_cidr} -d 224.0.0.0/24 -o #{pat_branch_interface_name} -j RETURN
