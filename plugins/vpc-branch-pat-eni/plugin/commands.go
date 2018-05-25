@@ -16,6 +16,7 @@ package plugin
 import (
 	"fmt"
 	"net"
+	"os/user"
 	"strconv"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
@@ -29,11 +30,12 @@ import (
 	cniTypes "github.com/containernetworking/cni/pkg/types"
 	cniCurrent "github.com/containernetworking/cni/pkg/types/current"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 const (
 	// Name templates used for objects created by this plugin.
-	netNSNameFormat      = "pat_net"
+	netNSNameFormat      = "vpc-pat-%s"
 	branchLinkNameFormat = "%s.%s"
 	tapLinkNameFormat    = "tap%s"
 	bridgeName           = "virbr0"
@@ -45,7 +47,7 @@ const (
 // Add is the internal implementation of CNI ADD command.
 func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	// Parse network configuration.
-	netConfig, err := config.New(args)
+	netConfig, err := config.New(args, true)
 	if err != nil {
 		log.Errorf("Failed to parse netconfig from args: %v.", err)
 		return err
@@ -55,7 +57,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	// Derive names from CNI network config.
 	// All fields have already been validated during parsing.
-	netnsName := netNSNameFormat // fmt.Sprintf(netNSNameFormat, netConfig.BranchVlanID)
+	netnsName := fmt.Sprintf(netNSNameFormat, netConfig.BranchVlanID)
 	bridgeIPAddress, _ := vpc.GetIPAddressFromString(bridgeIPAddressString)
 	branchName := fmt.Sprintf(branchLinkNameFormat, netConfig.TrunkName, netConfig.BranchVlanID)
 	branchMACAddress, _ := net.ParseMAC(netConfig.BranchMACAddress)
@@ -65,13 +67,21 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	branchSubnet, err := vpc.NewSubnet(netConfig.BranchIPAddress)
 	branchIPAddress, _ := vpc.GetIPAddressFromString(netConfig.BranchIPAddress)
 
-	// Runtime-supplied unique interface name overrides the default.
+	// Runtime-supplied unique interface name overrides the default tap link name.
 	var tapLinkName string
 	if args.IfName == "null" {
 		tapLinkName = fmt.Sprintf(tapLinkNameFormat, netConfig.BranchVlanID)
 	} else {
 		tapLinkName = args.IfName
 	}
+
+	// Lookup the user ID for tap link.
+	uid, err := plugin.lookupUser(netConfig.UserName)
+	if err != nil {
+		log.Errorf("Failed to lookup user %s: %v.", netConfig.UserName, err)
+		return err
+	}
+	log.Infof("Lookup for username %s returned uid %d.", netConfig.UserName, uid)
 
 	// Create the trunk ENI.
 	trunk, err := eni.NewTrunk(netConfig.TrunkName, eni.TrunkIsolationModeVLAN)
@@ -134,7 +144,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	// Create the tap link in target network namespace.
 	log.Infof("Creating tap link %s.", tapLinkName)
 	err = ns.Run(func() error {
-		return plugin.createTapLink(bridgeName, tapLinkName)
+		return plugin.createTapLink(bridgeName, tapLinkName, uid)
 	})
 	if err != nil {
 		log.Errorf("Failed to create tap link: %v.", err)
@@ -161,7 +171,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 // Del is the internal implementation of CNI DEL command.
 func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	// Parse network configuration.
-	netConfig, err := config.New(args)
+	netConfig, err := config.New(args, false)
 	if err != nil {
 		log.Errorf("Failed to parse netconfig from args: %v.", err)
 		return err
@@ -170,7 +180,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	log.Infof("Executing DEL with netconfig: %+v.", netConfig)
 
 	// Derive names from CNI network config.
-	netnsName := netNSNameFormat //fmt.Sprintf(netNSNameFormat, netConfig.BranchVlanID)
+	netnsName := fmt.Sprintf(netNSNameFormat, netConfig.BranchVlanID)
 
 	// Search for the PAT network namespace.
 	ns, err := netns.GetNetNSByName(netnsName)
@@ -378,7 +388,7 @@ func (plugin *Plugin) setupIptablesRules(bridgeName, bridgeSubnet, branchLinkNam
 }
 
 // createTapLink creates a tap link and attaches it to the bridge.
-func (plugin *Plugin) createTapLink(bridgeName string, tapLinkName string) error {
+func (plugin *Plugin) createTapLink(bridgeName string, tapLinkName string, uid int) error {
 	bridge, err := net.InterfaceByName(bridgeName)
 	if err != nil {
 		log.Errorf("Failed to find bridge %s: %v", bridgeName, err)
@@ -386,16 +396,29 @@ func (plugin *Plugin) createTapLink(bridgeName string, tapLinkName string) error
 	}
 
 	// Create the tap link.
-	// TODO: ip tuntap add #{pat_tap_interface_name} mode tap user #{default_user}
 	la := netlink.NewLinkAttrs()
 	la.Name = tapLinkName
 	la.MasterIndex = bridge.Index
 	la.MTU = 9001
-	tapLink := &netlink.Tuntap{LinkAttrs: la, Mode: netlink.TUNTAP_MODE_TAP}
+	tapLink := &netlink.Tuntap{
+		LinkAttrs: la,
+		Mode:      netlink.TUNTAP_MODE_TAP,
+		Queues:    1,
+	}
+
 	log.Infof("Creating tap link %+v.", tapLink)
 	err = netlink.LinkAdd(tapLink)
 	if err != nil {
 		log.Errorf("Failed to add tap link: %v", err)
+		return err
+	}
+
+	// Set tap link ownership.
+	log.Infof("Setting tap link owner to uid %d.", uid)
+	fd := int(tapLink.Fds[0].Fd())
+	err = unix.IoctlSetInt(fd, unix.TUNSETOWNER, uid)
+	if err != nil {
+		log.Errorf("Failed to set tap link owner: %v", err)
 		return err
 	}
 
@@ -408,4 +431,28 @@ func (plugin *Plugin) createTapLink(bridgeName string, tapLinkName string) error
 	}
 
 	return nil
+}
+
+// lookupUser returns the UID for the given username, or the current user.
+func (plugin *Plugin) lookupUser(userName string) (int, error) {
+	var u *user.User
+	var err error
+
+	// Lookup the current user if no username is given.
+	if userName == "" {
+		u, err = user.Current()
+	} else {
+		u, err = user.Lookup(userName)
+	}
+
+	if err != nil {
+		return -1, err
+	}
+
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return -1, err
+	}
+
+	return uid, nil
 }

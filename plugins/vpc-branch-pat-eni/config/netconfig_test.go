@@ -30,6 +30,6 @@ func TestValidConfig(t *testing.T) {
 	args := &skel.CmdArgs{
 		StdinData: []byte(config),
 	}
-	_, err := New(args)
+	_, err := New(args, false)
 	assert.NoError(t, err)
 }

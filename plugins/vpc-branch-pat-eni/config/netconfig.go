@@ -30,10 +30,11 @@ type NetConfig struct {
 	BranchVlanID     string `json:"branchVlanID"`
 	BranchMACAddress string `json:"branchMACAddress"`
 	BranchIPAddress  string `json:"branchIPAddress"`
+	UserName         string `json:"userName"`
 }
 
 // New creates a new NetConfig object by parsing the given CNI arguments.
-func New(args *skel.CmdArgs) (*NetConfig, error) {
+func New(args *skel.CmdArgs, isAdd bool) (*NetConfig, error) {
 	var config NetConfig
 	if err := json.Unmarshal(args.StdinData, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse network config: %v", err)
@@ -46,18 +47,22 @@ func New(args *skel.CmdArgs) (*NetConfig, error) {
 	if config.BranchVlanID == "" {
 		return nil, fmt.Errorf("missing required parameter branchVlanID")
 	}
-	if config.BranchMACAddress == "" {
+	if isAdd && config.BranchMACAddress == "" {
 		return nil, fmt.Errorf("missing required parameter branchMACAddress")
 	}
 
 	// Validate if the MAC address is valid.
-	if _, err := net.ParseMAC(config.BranchMACAddress); err != nil {
-		return nil, fmt.Errorf("invalid branchMACAddress %s", config.BranchMACAddress)
+	if config.BranchMACAddress != "" {
+		if _, err := net.ParseMAC(config.BranchMACAddress); err != nil {
+			return nil, fmt.Errorf("invalid branchMACAddress %s", config.BranchMACAddress)
+		}
 	}
 
 	// Validate if the IPv4 address is valid.
-	if _, _, err := net.ParseCIDR(config.BranchIPAddress); err != nil {
-		return nil, fmt.Errorf("invalid branchIPAddress %s", config.BranchIPAddress)
+	if config.BranchIPAddress != "" {
+		if _, _, err := net.ParseCIDR(config.BranchIPAddress); err != nil {
+			return nil, fmt.Errorf("invalid branchIPAddress %s", config.BranchIPAddress)
+		}
 	}
 
 	// Validation complete. Return the parsed config object.
