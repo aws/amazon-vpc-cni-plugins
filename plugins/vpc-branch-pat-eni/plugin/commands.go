@@ -252,7 +252,7 @@ func (plugin *Plugin) setupPATNetworkNamespace(
 	// Create the bridge link.
 	la := netlink.NewLinkAttrs()
 	la.Name = bridgeName
-	la.MTU = 9001
+	la.MTU = vpc.JumboFrameMTU
 	bridgeLink := &netlink.Bridge{LinkAttrs: la}
 	log.Infof("Creating bridge link %+v.", bridgeLink)
 	err := netlink.LinkAdd(bridgeLink)
@@ -261,15 +261,30 @@ func (plugin *Plugin) setupPATNetworkNamespace(
 		return err
 	}
 
+	// Set bridge link MTU.
+	err = netlink.LinkSetMTU(bridgeLink, vpc.JumboFrameMTU)
+	if err != nil {
+		log.Errorf("Failed to set bridge link MTU: %v", err)
+		return err
+	}
+
 	// Create the dummy link.
 	la = netlink.NewLinkAttrs()
 	la.Name = fmt.Sprintf("%s-dummy", bridgeName)
+	la.MTU = vpc.JumboFrameMTU
 	la.MasterIndex = bridgeLink.Index
 	dummyLink := &netlink.Dummy{LinkAttrs: la}
 	log.Infof("Creating dummy link %+v.", dummyLink)
 	err = netlink.LinkAdd(dummyLink)
 	if err != nil {
 		log.Errorf("Failed to create dummy link: %v", err)
+		return err
+	}
+
+	// Set dummy link MTU.
+	err = netlink.LinkSetMTU(dummyLink, vpc.JumboFrameMTU)
+	if err != nil {
+		log.Errorf("Failed to set dummy link MTU: %v", err)
 		return err
 	}
 
@@ -399,10 +414,11 @@ func (plugin *Plugin) createTapLink(bridgeName string, tapLinkName string, uid i
 	la := netlink.NewLinkAttrs()
 	la.Name = tapLinkName
 	la.MasterIndex = bridge.Index
-	la.MTU = 9001
+	la.MTU = vpc.JumboFrameMTU
 	tapLink := &netlink.Tuntap{
 		LinkAttrs: la,
 		Mode:      netlink.TUNTAP_MODE_TAP,
+		Flags:     netlink.TUNTAP_ONE_QUEUE | netlink.TUNTAP_VNET_HDR,
 		Queues:    1,
 	}
 
@@ -410,6 +426,13 @@ func (plugin *Plugin) createTapLink(bridgeName string, tapLinkName string, uid i
 	err = netlink.LinkAdd(tapLink)
 	if err != nil {
 		log.Errorf("Failed to add tap link: %v", err)
+		return err
+	}
+
+	// Set tap link MTU.
+	err = netlink.LinkSetMTU(tapLink, vpc.JumboFrameMTU)
+	if err != nil {
+		log.Errorf("Failed to set tap link MTU: %v", err)
 		return err
 	}
 
