@@ -30,9 +30,10 @@ import (
 )
 
 const (
-	netNSNameFormat       = "vm%s_net"
-	branchLinkNameFormat  = "%s.%s"
-	macvtapLinkNameFormat = "macvtap%s"
+	// branchLinkNameFormat is the name format for intermediate branch interfaces created for
+	// hardware-virtualized containers. The name of the actual network interface passed to
+	// VMM/container is set in CNI_IFNAME environment variable.
+	branchLinkNameFormat = "%s.%s"
 )
 
 // Add is the internal implementation of CNI ADD command.
@@ -52,25 +53,21 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	branchMACAddress, _ := net.ParseMAC(netConfig.BranchMACAddress)
 	branchVlanID, _ := strconv.Atoi(netConfig.BranchVlanID)
 
-	var netnsName string
 	var ns netns.NetNS
-	var hwVirtualized bool
-	var ifName string
+	netnsName := args.Netns
+	ifName := args.IfName
+	hwVirtualized := true
 
 	// Find or create the network namespace.
-	if args.Netns == "null" {
+	if hwVirtualized {
 		// Container runs hardware virtualized.
-		// The target network namespace is inside a VM.
-		hwVirtualized = true
-		netnsName = fmt.Sprintf(netNSNameFormat, netConfig.BranchVlanID)
+		// The target network namespace is a new namespace for a VM.
 		log.Infof("Creating netns %s.", netnsName)
 		ns, err = netns.NewNetNS(netnsName)
 	} else {
 		// Container runs OS virtualized.
-		// The target network namespace is on this host.
-		hwVirtualized = false
-		ifName = branchName
-		netnsName = args.Netns
+		// The target network namespace is an existing namespace on this host.
+		branchName = ifName
 		log.Infof("Searching for netns %s.", netnsName)
 		ns, err = netns.GetNetNSByName(netnsName)
 	}
@@ -115,7 +112,6 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		// In target network namespace...
 		err = ns.Run(func() error {
 			// Create a MACVTAP link and attach it on top of the branch link.
-			ifName = fmt.Sprintf(macvtapLinkNameFormat, netConfig.BranchVlanID)
 			la := netlink.NewLinkAttrs()
 			la.Name = ifName
 			la.ParentIndex = branch.GetLinkIndex()
@@ -183,21 +179,26 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	log.Infof("Executing DEL with netconfig: %+v.", netConfig)
 
 	// Derive names from CNI network config.
-	netnsName := fmt.Sprintf(netNSNameFormat, netConfig.BranchVlanID)
+	netnsName := args.Netns
+	hwVirtualized := true
 
-	// Find the network namespace.
-	log.Infof("Deleting netns %s.", netnsName)
-	ns, err := netns.GetNetNSByName(netnsName)
-	if err != nil {
-		log.Errorf("Failed to find netns: %v.", err)
-		return err
-	}
+	if hwVirtualized {
+		// Find the network namespace.
+		log.Infof("Deleting netns %s.", netnsName)
+		ns, err := netns.GetNetNSByName(netnsName)
+		if err != nil {
+			log.Errorf("Failed to find netns: %v.", err)
+			return err
+		}
 
-	// Delete the network namespace and thereby all virtual interfaces in it.
-	err = ns.Close()
-	if err != nil {
-		log.Errorf("Failed to delete netns: %v.", err)
-		return err
+		// Delete the network namespace and thereby all virtual interfaces in it.
+		err = ns.Close()
+		if err != nil {
+			log.Errorf("Failed to delete netns: %v.", err)
+			return err
+		}
+	} else {
+		// Delete the branch interface.
 	}
 
 	return nil
