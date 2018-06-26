@@ -16,7 +16,6 @@ package plugin
 import (
 	"fmt"
 	"net"
-	"os/user"
 	"strconv"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
@@ -82,8 +81,8 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		return err
 	}
 
-	// Lookup the user ID for tap link.
-	uid, err := plugin.lookupUser(netConfig.UserName)
+	// Lookup the user ID for TAP link.
+	uid, err := plugin.CNIPlugin.LookupUser(netConfig.UserName)
 	if err != nil {
 		log.Errorf("Failed to lookup user %s: %v.", netConfig.UserName, err)
 		return err
@@ -213,7 +212,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 			la := netlink.NewLinkAttrs()
 			la.Name = tapLinkName
 			tapLink := &netlink.Tuntap{LinkAttrs: la}
-			log.Infof("Deleting tap link: %+v.", tapLink)
+			log.Infof("Deleting tap link: %v.", tapLinkName)
 			err = netlink.LinkDel(tapLink)
 			if err != nil {
 				log.Errorf("Failed to delete tap link: %v.", err)
@@ -223,7 +222,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 			la = netlink.NewLinkAttrs()
 			la.Name = vethPeerName
 			vethLink := &netlink.Veth{LinkAttrs: la}
-			log.Infof("Deleting veth pair: %+v.", vethLink)
+			log.Infof("Deleting veth pair: %v.", vethPeerName)
 			err = netlink.LinkDel(vethLink)
 			if err != nil {
 				log.Errorf("Failed to delete veth pair: %v.", err)
@@ -233,7 +232,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 			la = netlink.NewLinkAttrs()
 			la.Name = tapBridgeName
 			tapBridge := &netlink.Bridge{LinkAttrs: la}
-			log.Infof("Deleting tap bridge: %+v.", tapBridge)
+			log.Infof("Deleting tap bridge: %v.", tapBridgeName)
 			err = netlink.LinkDel(tapBridge)
 			if err != nil {
 				log.Errorf("Failed to delete tap bridge: %v.", err)
@@ -255,7 +254,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 		err = patNetNS.Run(func() error {
 			// Check whether there are any remaining veth links connected to this bridge.
 			ifaces, _ := net.Interfaces()
-			log.Infof("Number of remaining links: %+v.", len(ifaces))
+			log.Infof("Number of remaining links: %v.", len(ifaces))
 			if len(ifaces) == 4 {
 				// Only VLAN link, bridge, dummy and loopback remain.
 				lastVethLinkDeleted = true
@@ -554,28 +553,4 @@ func (plugin *Plugin) createTapLink(bridgeName string, vethLinkName string, tapL
 	}
 
 	return nil
-}
-
-// lookupUser returns the UID for the given username, or the current user.
-func (plugin *Plugin) lookupUser(userName string) (int, error) {
-	var u *user.User
-	var err error
-
-	// Lookup the current user if no username is given.
-	if userName == "" {
-		u, err = user.Current()
-	} else {
-		u, err = user.Lookup(userName)
-	}
-
-	if err != nil {
-		return -1, err
-	}
-
-	uid, err := strconv.Atoi(u.Uid)
-	if err != nil {
-		return -1, err
-	}
-
-	return uid, nil
 }

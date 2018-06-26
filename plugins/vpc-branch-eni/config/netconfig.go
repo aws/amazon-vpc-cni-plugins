@@ -29,7 +29,16 @@ type NetConfig struct {
 	TrunkName        string `json:"trunkName"`
 	BranchVlanID     string `json:"branchVlanID"`
 	BranchMACAddress string `json:"branchMACAddress"`
+	InterfaceType    string `json:"interfaceType"`
+	UserName         string `json:"userName"`
 }
+
+const (
+	// Interface type values.
+	IfTypeVLAN    = "vlan"
+	IfTypeTAP     = "tap"
+	IfTypeMACVTAP = "macvtap"
+)
 
 // New creates a new NetConfig object by parsing the given CNI arguments.
 func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
@@ -47,6 +56,11 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	}
 	if config.BranchMACAddress == "" {
 		return nil, fmt.Errorf("missing required parameter branchMACAddress")
+	}
+
+	// Set defaults.
+	if config.InterfaceType == "" {
+		config.InterfaceType = IfTypeTAP
 	}
 
 	// Validate if the MAC address is valid.
