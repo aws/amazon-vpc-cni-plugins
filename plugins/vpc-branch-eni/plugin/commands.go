@@ -332,5 +332,11 @@ func (plugin *Plugin) createMACVTAPLink(linkName string, parentIndex int) error 
 
 	// Set MACVTAP link operational state up.
 	log.Infof("Setting MACVTAP link state up.")
-	return netlink.LinkSetUp(macvtapLink)
+	err = netlink.LinkSetUp(macvtapLink)
+	if err != nil {
+		log.Errorf("Failed to set MACVTAP link state: %v.", err)
+		return err
+	}
+
+	return nil
 }

@@ -77,7 +77,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	log.Infof("Searching for target netns %s.", targetNetNSName)
 	targetNetNS, err := netns.GetNetNSByName(targetNetNSName)
 	if err != nil {
-		log.Infof("Failed to find target netns %s.", targetNetNSName)
+		log.Errorf("Failed to find target netns %s.", targetNetNSName)
 		return err
 	}
 
@@ -263,7 +263,8 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 			return nil
 		})
 
-		// Delete the PAT network namespace and all virtual interfaces in it.
+		// If all veth links connected to this PAT bridge are deleted, clean up the PAT network
+		// namespace and all virtual interfaces in it. Otherwise, leave it running.
 		if lastVethLinkDeleted {
 			log.Infof("Deleting PAT network namespace: %v.", patNetNSName)
 			err = patNetNS.Close()
