@@ -119,7 +119,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 		// Create a link for the branch ENI.
 		log.Infof("Creating branch link %s.", branchName)
-		err = branch.AttachToLink()
+		err = branch.AttachToLink(false)
 		if err != nil {
 			log.Errorf("Failed to attach branch interface %s: %v.", branchName, err)
 			return err

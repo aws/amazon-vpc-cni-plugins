@@ -33,6 +33,13 @@ import (
 
 const (
 	// Name templates used for objects created by this plugin.
+	// TODO
+	// For the caller to query/perform any subsequent configurations
+	// on the devices created by this plugin, we need to
+	// [i] Either make these configurable by accepting these names
+	// in the CNI config
+	// [ii] Or, print the names of created interfaces in the result
+	// so that the caller can use these names
 	branchLinkNameFormat = "%s.%s"
 	bridgeNameFormat     = "tapbr%s"
 )
@@ -99,7 +106,8 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	// Create a link for the branch ENI.
 	log.Infof("Creating branch link %s", branchName)
-	err = branch.AttachToLink()
+	overrideMAC := netConfig.InterfaceType == config.IfTypeVLAN
+	err = branch.AttachToLink(overrideMAC)
 	if err != nil {
 		log.Errorf("Failed to attach branch interface %s: %v.", branchName, err)
 		return err
