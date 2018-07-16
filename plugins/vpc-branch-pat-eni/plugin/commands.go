@@ -100,49 +100,9 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	log.Infof("Searching for PAT netns %s.", patNetNSName)
 	patNetNS, err := netns.GetNetNSByName(patNetNSName)
 	if err != nil {
-		log.Infof("PAT netns %s does not exist.", patNetNSName)
-
-		// Create the PAT network namespace.
-		log.Infof("Creating PAT netns %s.", patNetNSName)
-		patNetNS, err = netns.NewNetNS(patNetNSName)
-		if err != nil {
-			log.Errorf("Failed to create PAT netns: %v.", err)
-			return err
-		}
-
-		// Create the branch ENI.
-		branch, err := eni.NewBranch(trunk, branchName, branchMACAddress, branchVlanID)
-		if err != nil {
-			log.Errorf("Failed to create branch interface %s: %v.", branchName, err)
-			return err
-		}
-
-		// Create a link for the branch ENI.
-		log.Infof("Creating branch link %s.", branchName)
-		err = branch.AttachToLink(false)
-		if err != nil {
-			log.Errorf("Failed to attach branch interface %s: %v.", branchName, err)
-			return err
-		}
-
-		// Move branch ENI to the PAT network namespace.
-		log.Infof("Moving branch link to PAT netns.")
-		err = branch.SetNetNS(patNetNS)
-		if err != nil {
-			log.Errorf("Failed to move branch link: %v.", err)
-			return err
-		}
-
-		// Configure the PAT network namespace.
-		log.Infof("Setting up PAT netns %s.", patNetNSName)
-		err = patNetNS.Run(func() error {
-			return plugin.setupPATNetworkNamespace(
-				bridgeName, bridgeIPAddress, branch, branchIPAddress, branchSubnet)
-		})
-		if err != nil {
-			log.Errorf("Failed to setup PAT netns: %v.", err)
-			return err
-		}
+		patNetNS, err = plugin.createPATNetNS(patNetNSName, trunk,
+			branchName, branchMACAddress, branchVlanID, branchIPAddress, branchSubnet,
+			bridgeIPAddress)
 	} else {
 		log.Infof("Found PAT netns %s.", patNetNSName)
 	}
@@ -278,6 +238,61 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	}
 
 	return nil
+}
+
+// createPATNetNS creates the pat network namespace, along with the vlan
+// interface in the namespace
+func (plugin *Plugin) createPATNetNS(patNetNSName string,
+	trunk *eni.Trunk,
+	branchName string,
+	branchMACAddress net.HardwareAddr,
+	branchVlanID int,
+	branchIPAddress *net.IPNet,
+	branchSubnet *vpc.Subnet,
+	bridgeIPAddress *net.IPNet) (netns.NetNS, error) {
+	// Create the PAT network namespace.
+	log.Infof("Creating PAT netns %s", patNetNSName)
+	patNetNS, err := netns.NewNetNS(patNetNSName)
+	if err != nil {
+		log.Errorf("Failed to create PAT netns %s: %v", patNetNSName, err)
+		return nil, err
+	}
+
+	// Create the branch ENI.
+	branch, err := eni.NewBranch(trunk, branchName, branchMACAddress, branchVlanID)
+	if err != nil {
+		log.Errorf("Failed to create branch interface %s in PAT netns %s: %v",
+			branchName, patNetNSName, err)
+		return nil, err
+	}
+
+	// Create a link for the branch ENI.
+	log.Infof("Creating branch link %s in PAT netns %s", branchName, patNetNSName)
+	if err = branch.AttachToLink(false); err != nil {
+		log.Errorf("Failed to attach branch interface %s in %s: %v",
+			branchName, patNetNSName, err)
+		return nil, err
+	}
+
+	// Move branch ENI to the PAT network namespace.
+	log.Infof("Moving branch link %s to PAT netns %s", branchName, patNetNSName)
+	if err = branch.SetNetNS(patNetNS); err != nil {
+		log.Errorf("Failed to move branch link %s to PAT netns %s: %v",
+			branchName, patNetNSName, err)
+		return nil, err
+	}
+
+	// Configure the PAT network namespace.
+	log.Infof("Setting up PAT netns %s", patNetNSName)
+	err = patNetNS.Run(func() error {
+		return plugin.setupPATNetworkNamespace(
+			bridgeName, bridgeIPAddress, branch, branchIPAddress, branchSubnet)
+	})
+	if err != nil {
+		log.Errorf("Failed to setup PAT netns %s: %v", patNetNSName, err)
+		return nil, err
+	}
+	return patNetNS, nil
 }
 
 // setupPATNetworkNamespace configures all networking inside the PAT network namespace.
