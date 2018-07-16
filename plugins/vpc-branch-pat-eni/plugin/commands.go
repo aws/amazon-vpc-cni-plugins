@@ -285,7 +285,7 @@ func (plugin *Plugin) createPATNetNS(patNetNSName string,
 	// Configure the PAT network namespace.
 	log.Infof("Setting up PAT netns %s", patNetNSName)
 	err = patNetNS.Run(func() error {
-		return plugin.setupPATNetworkNamespace(
+		return plugin.setupPATNetworkNamespace(patNetNSName,
 			bridgeName, bridgeIPAddress, branch, branchIPAddress, branchSubnet)
 	})
 	if err != nil {
@@ -297,6 +297,7 @@ func (plugin *Plugin) createPATNetNS(patNetNSName string,
 
 // setupPATNetworkNamespace configures all networking inside the PAT network namespace.
 func (plugin *Plugin) setupPATNetworkNamespace(
+	patNetNSName string,
 	bridgeName string, bridgeIPAddress *net.IPNet,
 	branch *eni.Branch, branchIPAddress *net.IPNet, branchSubnet *vpc.Subnet) error {
 
@@ -305,17 +306,17 @@ func (plugin *Plugin) setupPATNetworkNamespace(
 	la.Name = bridgeName
 	la.MTU = vpc.JumboFrameMTU
 	bridgeLink := &netlink.Bridge{LinkAttrs: la}
-	log.Infof("Creating bridge link %+v.", bridgeLink)
+	log.Infof("Creating bridge link %+v in PAT netns %s", bridgeLink, patNetNSName)
 	err := netlink.LinkAdd(bridgeLink)
 	if err != nil {
-		log.Errorf("Failed to create bridge link: %v", err)
+		log.Errorf("Failed to create bridge link in PAT netns %s: %v", patNetNSName, err)
 		return err
 	}
 
 	// Set bridge link MTU.
 	err = netlink.LinkSetMTU(bridgeLink, vpc.JumboFrameMTU)
 	if err != nil {
-		log.Errorf("Failed to set bridge link MTU: %v", err)
+		log.Errorf("Failed to set bridge link MTU in PAT netns %s: %v", patNetNSName, err)
 		return err
 	}
 
@@ -325,56 +326,61 @@ func (plugin *Plugin) setupPATNetworkNamespace(
 	la.MTU = vpc.JumboFrameMTU
 	la.MasterIndex = bridgeLink.Index
 	dummyLink := &netlink.Dummy{LinkAttrs: la}
-	log.Infof("Creating dummy link %+v.", dummyLink)
+	log.Infof("Creating dummy link %+v in PAT netns %s", dummyLink, patNetNSName)
 	err = netlink.LinkAdd(dummyLink)
 	if err != nil {
-		log.Errorf("Failed to create dummy link: %v", err)
+		log.Errorf("Failed to create dummy link in PAT netns %s: %v", patNetNSName, err)
 		return err
 	}
 
 	// Set dummy link MTU.
 	err = netlink.LinkSetMTU(dummyLink, vpc.JumboFrameMTU)
 	if err != nil {
-		log.Errorf("Failed to set dummy link MTU: %v", err)
+		log.Errorf("Failed to set dummy link MTU in PAT netns %s: %v", patNetNSName, err)
 		return err
 	}
 
 	// Assign IP address to PAT bridge.
-	log.Infof("Assigning IP address %v to bridge link %s.", bridgeIPAddress, bridgeName)
+	log.Infof("Assigning IP address %v to bridge link %s in PAT netns %s",
+		bridgeIPAddress, bridgeName, patNetNSName)
 	address := &netlink.Addr{IPNet: bridgeIPAddress}
 	err = netlink.AddrAdd(bridgeLink, address)
 	if err != nil {
-		log.Errorf("Failed to assign IP address to bridge link: %v", err)
+		log.Errorf("Failed to assign IP address to bridge link in PAT netns %s: %v",
+			patNetNSName, err)
 		return err
 	}
 
 	// Set bridge link operational state up.
-	log.Info("Setting bridge link state up.")
+	log.Infof("Setting bridge link state up in PAT netns %s", patNetNSName)
 	err = netlink.LinkSetUp(bridgeLink)
 	if err != nil {
-		log.Errorf("Failed to set bridge link state: %v", err)
+		log.Errorf("Failed to set bridge link state in PAT netns %s: %v", patNetNSName, err)
 		return err
 	}
 
 	// TODO: brctl stp #{pat_bridge_interface_name} off
 
 	// Assign IP address to branch interface.
-	log.Infof("Assigning IP address %v to branch link.", branchIPAddress)
+	log.Infof("Assigning IP address %v to branch link in PAT netns %s",
+		branchIPAddress, patNetNSName)
 	address = &netlink.Addr{IPNet: branchIPAddress}
 	la = netlink.NewLinkAttrs()
 	la.Index = branch.GetLinkIndex()
 	link := &netlink.Dummy{LinkAttrs: la}
 	err = netlink.AddrAdd(link, address)
 	if err != nil {
-		log.Errorf("Failed to assign IP address to branch link: %v", err)
+		log.Errorf("Failed to assign IP address to branch link in PAT netns %s: %v",
+			patNetNSName, err)
 		return err
 	}
 
 	// Set branch link operational state up.
-	log.Info("Setting branch link state up.")
+	log.Infof("Setting branch link state up in PAT netns %s", patNetNSName)
 	err = branch.SetOpState(true)
 	if err != nil {
-		log.Errorf("Failed to set branch link state: %v", err)
+		log.Errorf("Failed to set branch link state in PAT netns %s: %v",
+			patNetNSName, err)
 		return err
 	}
 
@@ -383,17 +389,21 @@ func (plugin *Plugin) setupPATNetworkNamespace(
 		Gw:        branchSubnet.Gateways[0],
 		LinkIndex: branch.GetLinkIndex(),
 	}
-	log.Infof("Adding default route to %+v.", route)
+	log.Infof("Adding default route to %+v in PAT netns %s", route, patNetNSName)
 	err = netlink.RouteAdd(route)
 	if err != nil {
-		log.Errorf("Failed to add IP route: %v", err)
+		log.Errorf("Failed to add IP route in PAT netns %s: %v", patNetNSName, err)
 		return err
 	}
 
 	// Configure iptables rules.
-	log.Info("Configuring iptables rules.")
+	log.Infof("Configuring iptables rules in PAT netns %s", patNetNSName)
 	_, bridgeSubnet, _ := net.ParseCIDR(bridgeIPAddress.String())
-	plugin.setupIptablesRules(bridgeName, bridgeSubnet.String(), branch.GetLinkName())
+	err = plugin.setupIptablesRules(bridgeName, bridgeSubnet.String(), branch.GetLinkName())
+	if err != nil {
+		log.Errorf("Unable to setup iptables rules in PAT netns %s: %v", patNetNSName, err)
+		return err
+	}
 
 	return nil
 }
