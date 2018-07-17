@@ -31,6 +31,7 @@ type NetConfig struct {
 	BranchMACAddress string `json:"branchMACAddress"`
 	BranchIPAddress  string `json:"branchIPAddress"`
 	UserName         string `json:"userName"`
+	CleanupPATNetNS  bool   `json:"cleanupPATNetNS"`
 }
 
 // New creates a new NetConfig object by parsing the given CNI arguments.

@@ -64,6 +64,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	branchVlanID, _ := strconv.Atoi(netConfig.BranchVlanID)
 
 	// Compute the branch ENI's VPC subnet.
+	// TODO: error handling here
 	branchSubnet, err := vpc.NewSubnet(netConfig.BranchIPAddress)
 	branchIPAddress, _ := vpc.GetIPAddressFromString(netConfig.BranchIPAddress)
 
@@ -100,9 +101,10 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	log.Infof("Searching for PAT netns %s.", patNetNSName)
 	patNetNS, err := netns.GetNetNSByName(patNetNSName)
 	if err != nil {
-		patNetNS, err = plugin.createPATNetNS(patNetNSName, trunk,
-			branchName, branchMACAddress, branchVlanID, branchIPAddress, branchSubnet,
-			bridgeIPAddress)
+		patNetNS, err = plugin.createPATNetworkNamespace(
+			patNetNSName, trunk,
+			branchName, branchMACAddress, branchVlanID,
+			branchIPAddress, branchSubnet, bridgeIPAddress)
 	} else {
 		log.Infof("Found PAT netns %s.", patNetNSName)
 	}
@@ -139,7 +141,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		},
 	}
 
-	log.Infof("Writing CNI result to stdout: %+v", result)
+	log.Infof("Writing CNI result to stdout: %+v.", result)
 
 	return cniTypes.PrintResult(result, netConfig.CNIVersion)
 }
@@ -163,47 +165,8 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	tapLinkName := args.IfName
 	targetNetNSName := args.Netns
 
-	// Search for the target network namespace.
-	targetNetNS, err := netns.GetNetNSByName(targetNetNSName)
-	if err == nil {
-		// In target network namespace...
-		err = targetNetNS.Run(func() error {
-			// Delete the tap link.
-			la := netlink.NewLinkAttrs()
-			la.Name = tapLinkName
-			tapLink := &netlink.Tuntap{LinkAttrs: la}
-			log.Infof("Deleting tap link: %v.", tapLinkName)
-			err = netlink.LinkDel(tapLink)
-			if err != nil {
-				log.Errorf("Failed to delete tap link: %v.", err)
-			}
-
-			// Delete the veth pair.
-			la = netlink.NewLinkAttrs()
-			la.Name = vethPeerName
-			vethLink := &netlink.Veth{LinkAttrs: la}
-			log.Infof("Deleting veth pair: %v.", vethPeerName)
-			err = netlink.LinkDel(vethLink)
-			if err != nil {
-				log.Errorf("Failed to delete veth pair: %v.", err)
-			}
-
-			// Delete the tap bridge.
-			la = netlink.NewLinkAttrs()
-			la.Name = tapBridgeName
-			tapBridge := &netlink.Bridge{LinkAttrs: la}
-			log.Infof("Deleting tap bridge: %v.", tapBridgeName)
-			err = netlink.LinkDel(tapBridge)
-			if err != nil {
-				log.Errorf("Failed to delete tap bridge: %v.", err)
-			}
-
-			return nil
-		})
-	} else {
-		// Log and ignore the failure. DEL can be called multiple times and thus must be idempotent.
-		log.Errorf("Failed to find netns %s, ignoring: %v.", targetNetNSName, err)
-	}
+	// Delete the tap link and vethpair device from the target netns
+	plugin.deleteTapVethInterfaces(tapLinkName, targetNetNSName, vethPeerName, tapBridgeName)
 
 	// Search for the PAT network namespace.
 	patNetNS, err := netns.GetNetNSByName(patNetNSName)
@@ -240,9 +203,10 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	return nil
 }
 
-// createPATNetNS creates the pat network namespace, along with the vlan
-// interface in the namespace
-func (plugin *Plugin) createPATNetNS(patNetNSName string,
+// createPATNetworkNamespace creates the pat network namespace for the specified
+// branch interface
+func (plugin *Plugin) createPATNetworkNamespace(
+	patNetNSName string,
 	trunk *eni.Trunk,
 	branchName string,
 	branchMACAddress net.HardwareAddr,
@@ -251,45 +215,45 @@ func (plugin *Plugin) createPATNetNS(patNetNSName string,
 	branchSubnet *vpc.Subnet,
 	bridgeIPAddress *net.IPNet) (netns.NetNS, error) {
 	// Create the PAT network namespace.
-	log.Infof("Creating PAT netns %s", patNetNSName)
+	log.Infof("Creating PAT netns %s.", patNetNSName)
 	patNetNS, err := netns.NewNetNS(patNetNSName)
 	if err != nil {
-		log.Errorf("Failed to create PAT netns %s: %v", patNetNSName, err)
+		log.Errorf("Failed to create PAT netns %s: %v.", patNetNSName, err)
 		return nil, err
 	}
 
 	// Create the branch ENI.
 	branch, err := eni.NewBranch(trunk, branchName, branchMACAddress, branchVlanID)
 	if err != nil {
-		log.Errorf("Failed to create branch interface %s in PAT netns %s: %v",
+		log.Errorf("Failed to create branch interface %s in PAT netns %s: %v.",
 			branchName, patNetNSName, err)
 		return nil, err
 	}
 
 	// Create a link for the branch ENI.
-	log.Infof("Creating branch link %s in PAT netns %s", branchName, patNetNSName)
-	if err = branch.AttachToLink(false); err != nil {
-		log.Errorf("Failed to attach branch interface %s in %s: %v",
+	log.Infof("Creating branch link %s in PAT netns %s.", branchName, patNetNSName)
+	if err = branch.AttachToLink(true); err != nil {
+		log.Errorf("Failed to attach branch interface %s in %s: %v.",
 			branchName, patNetNSName, err)
 		return nil, err
 	}
 
 	// Move branch ENI to the PAT network namespace.
-	log.Infof("Moving branch link %s to PAT netns %s", branchName, patNetNSName)
+	log.Infof("Moving branch link %s to PAT netns %s.", branchName, patNetNSName)
 	if err = branch.SetNetNS(patNetNS); err != nil {
-		log.Errorf("Failed to move branch link %s to PAT netns %s: %v",
+		log.Errorf("Failed to move branch link %s to PAT netns %s: %v.",
 			branchName, patNetNSName, err)
 		return nil, err
 	}
 
 	// Configure the PAT network namespace.
-	log.Infof("Setting up PAT netns %s", patNetNSName)
+	log.Infof("Setting up PAT netns %s.", patNetNSName)
 	err = patNetNS.Run(func() error {
 		return plugin.setupPATNetworkNamespace(patNetNSName,
 			bridgeName, bridgeIPAddress, branch, branchIPAddress, branchSubnet)
 	})
 	if err != nil {
-		log.Errorf("Failed to setup PAT netns %s: %v", patNetNSName, err)
+		log.Errorf("Failed to setup PAT netns %s: %v.", patNetNSName, err)
 		return nil, err
 	}
 	return patNetNS, nil
@@ -306,17 +270,17 @@ func (plugin *Plugin) setupPATNetworkNamespace(
 	la.Name = bridgeName
 	la.MTU = vpc.JumboFrameMTU
 	bridgeLink := &netlink.Bridge{LinkAttrs: la}
-	log.Infof("Creating bridge link %+v in PAT netns %s", bridgeLink, patNetNSName)
+	log.Infof("Creating bridge link %+v in PAT netns %s.", bridgeLink, patNetNSName)
 	err := netlink.LinkAdd(bridgeLink)
 	if err != nil {
-		log.Errorf("Failed to create bridge link in PAT netns %s: %v", patNetNSName, err)
+		log.Errorf("Failed to create bridge link in PAT netns %s: %v.", patNetNSName, err)
 		return err
 	}
 
 	// Set bridge link MTU.
 	err = netlink.LinkSetMTU(bridgeLink, vpc.JumboFrameMTU)
 	if err != nil {
-		log.Errorf("Failed to set bridge link MTU in PAT netns %s: %v", patNetNSName, err)
+		log.Errorf("Failed to set bridge link MTU in PAT netns %s: %v.", patNetNSName, err)
 		return err
 	}
 
@@ -326,43 +290,43 @@ func (plugin *Plugin) setupPATNetworkNamespace(
 	la.MTU = vpc.JumboFrameMTU
 	la.MasterIndex = bridgeLink.Index
 	dummyLink := &netlink.Dummy{LinkAttrs: la}
-	log.Infof("Creating dummy link %+v in PAT netns %s", dummyLink, patNetNSName)
+	log.Infof("Creating dummy link %+v in PAT netns %s.", dummyLink, patNetNSName)
 	err = netlink.LinkAdd(dummyLink)
 	if err != nil {
-		log.Errorf("Failed to create dummy link in PAT netns %s: %v", patNetNSName, err)
+		log.Errorf("Failed to create dummy link in PAT netns %s: %v.", patNetNSName, err)
 		return err
 	}
 
 	// Set dummy link MTU.
 	err = netlink.LinkSetMTU(dummyLink, vpc.JumboFrameMTU)
 	if err != nil {
-		log.Errorf("Failed to set dummy link MTU in PAT netns %s: %v", patNetNSName, err)
+		log.Errorf("Failed to set dummy link MTU in PAT netns %s: %v.", patNetNSName, err)
 		return err
 	}
 
 	// Assign IP address to PAT bridge.
-	log.Infof("Assigning IP address %v to bridge link %s in PAT netns %s",
+	log.Infof("Assigning IP address %v to bridge link %s in PAT netns %s.",
 		bridgeIPAddress, bridgeName, patNetNSName)
 	address := &netlink.Addr{IPNet: bridgeIPAddress}
 	err = netlink.AddrAdd(bridgeLink, address)
 	if err != nil {
-		log.Errorf("Failed to assign IP address to bridge link in PAT netns %s: %v",
+		log.Errorf("Failed to assign IP address to bridge link in PAT netns %s: %v.",
 			patNetNSName, err)
 		return err
 	}
 
 	// Set bridge link operational state up.
-	log.Infof("Setting bridge link state up in PAT netns %s", patNetNSName)
+	log.Infof("Setting bridge link state up in PAT netns %s.", patNetNSName)
 	err = netlink.LinkSetUp(bridgeLink)
 	if err != nil {
-		log.Errorf("Failed to set bridge link state in PAT netns %s: %v", patNetNSName, err)
+		log.Errorf("Failed to set bridge link state in PAT netns %s: %v.", patNetNSName, err)
 		return err
 	}
 
 	// TODO: brctl stp #{pat_bridge_interface_name} off
 
 	// Assign IP address to branch interface.
-	log.Infof("Assigning IP address %v to branch link in PAT netns %s",
+	log.Infof("Assigning IP address %v to branch link in PAT netns %s.",
 		branchIPAddress, patNetNSName)
 	address = &netlink.Addr{IPNet: branchIPAddress}
 	la = netlink.NewLinkAttrs()
@@ -370,16 +334,16 @@ func (plugin *Plugin) setupPATNetworkNamespace(
 	link := &netlink.Dummy{LinkAttrs: la}
 	err = netlink.AddrAdd(link, address)
 	if err != nil {
-		log.Errorf("Failed to assign IP address to branch link in PAT netns %s: %v",
+		log.Errorf("Failed to assign IP address to branch link in PAT netns %s: %v.",
 			patNetNSName, err)
 		return err
 	}
 
 	// Set branch link operational state up.
-	log.Infof("Setting branch link state up in PAT netns %s", patNetNSName)
+	log.Infof("Setting branch link state up in PAT netns %s.", patNetNSName)
 	err = branch.SetOpState(true)
 	if err != nil {
-		log.Errorf("Failed to set branch link state in PAT netns %s: %v",
+		log.Errorf("Failed to set branch link state in PAT netns %s: %v.",
 			patNetNSName, err)
 		return err
 	}
@@ -389,19 +353,19 @@ func (plugin *Plugin) setupPATNetworkNamespace(
 		Gw:        branchSubnet.Gateways[0],
 		LinkIndex: branch.GetLinkIndex(),
 	}
-	log.Infof("Adding default route to %+v in PAT netns %s", route, patNetNSName)
+	log.Infof("Adding default route to %+v in PAT netns %s.", route, patNetNSName)
 	err = netlink.RouteAdd(route)
 	if err != nil {
-		log.Errorf("Failed to add IP route in PAT netns %s: %v", patNetNSName, err)
+		log.Errorf("Failed to add IP route in PAT netns %s: %v.", patNetNSName, err)
 		return err
 	}
 
 	// Configure iptables rules.
-	log.Infof("Configuring iptables rules in PAT netns %s", patNetNSName)
+	log.Infof("Configuring iptables rules in PAT netns %s.", patNetNSName)
 	_, bridgeSubnet, _ := net.ParseCIDR(bridgeIPAddress.String())
 	err = plugin.setupIptablesRules(bridgeName, bridgeSubnet.String(), branch.GetLinkName())
 	if err != nil {
-		log.Errorf("Unable to setup iptables rules in PAT netns %s: %v", patNetNSName, err)
+		log.Errorf("Unable to setup iptables rules in PAT netns %s: %v.", patNetNSName, err)
 		return err
 	}
 
@@ -457,7 +421,7 @@ func (plugin *Plugin) setupIptablesRules(bridgeName, bridgeSubnet, branchLinkNam
 	// Commit all rules in this session atomically.
 	err = s.Commit(nil)
 	if err != nil {
-		log.Errorf("Failed to commit iptables rules: %v", err)
+		log.Errorf("Failed to commit iptables rules: %v.", err)
 	}
 
 	return err
@@ -470,7 +434,7 @@ func (plugin *Plugin) createVethPair(
 	// Find the PAT bridge.
 	bridge, err := net.InterfaceByName(bridgeName)
 	if err != nil {
-		log.Errorf("Failed to find bridge %s: %v", bridgeName, err)
+		log.Errorf("Failed to find bridge %s: %v.", bridgeName, err)
 		return err
 	}
 
@@ -487,41 +451,57 @@ func (plugin *Plugin) createVethPair(
 	log.Infof("Creating veth pair %+v.", vethLink)
 	err = netlink.LinkAdd(vethLink)
 	if err != nil {
-		log.Errorf("Failed to add veth pair: %v", err)
+		log.Errorf("Failed to add veth pair (%s, %s): %v.",
+			vethLinkName, vethPeerName, err)
 		return err
 	}
 
 	// Move the veth link's peer to target network namespace.
-	log.Infof("Moving veth link peer to target netns.")
+	log.Infof("Moving veth link peer %s to target netns.", vethPeerName)
 	la = netlink.NewLinkAttrs()
 	la.Name = vethPeerName
 	vethPeer := &netlink.Dummy{LinkAttrs: la}
 	err = netlink.LinkSetNsFd(vethPeer, int(targetNetNS.GetFd()))
 	if err != nil {
-		log.Errorf("Failed to move veth link peer: %v.", err)
+		log.Errorf("Failed to move veth link peer %s to target netns: %v.",
+			vethPeerName, err)
+		return err
 	}
 
-	return err
+	// Set the veth link operational state up
+	log.Infof("Setting the veth link %s state up.", vethLinkName)
+	err = netlink.LinkSetUp(vethLink)
+	if err != nil {
+		log.Errorf("Failed to bring up veth link %s: %v.",
+			vethLinkName, err)
+		return err
+	}
+	return nil
 }
 
 // createTapLink creates a tap link and attaches it to the bridge.
-func (plugin *Plugin) createTapLink(bridgeName string, vethLinkName string, tapLinkName string, uid int) error {
+func (plugin *Plugin) createTapLink(
+	bridgeName string,
+	vethLinkName string,
+	tapLinkName string,
+	uid int) error {
 	// Create the bridge link.
 	la := netlink.NewLinkAttrs()
 	la.Name = bridgeName
 	la.MTU = vpc.JumboFrameMTU
 	bridge := &netlink.Bridge{LinkAttrs: la}
-	log.Infof("Creating bridge link %+v.", bridge)
+	log.Infof("Creating tap bridge %+v.", bridge)
 	err := netlink.LinkAdd(bridge)
 	if err != nil {
-		log.Errorf("Failed to create bridge link: %v", err)
+		log.Errorf("Failed to create tap bridge %s: %v.", bridgeName, err)
 		return err
 	}
 
 	// Set bridge link MTU.
 	err = netlink.LinkSetMTU(bridge, vpc.JumboFrameMTU)
 	if err != nil {
-		log.Errorf("Failed to set bridge link MTU: %v", err)
+		log.Errorf("Failed to set tap bridge %s link MTU: %v.",
+			bridgeName, err)
 		return err
 	}
 
@@ -531,7 +511,8 @@ func (plugin *Plugin) createTapLink(bridgeName string, vethLinkName string, tapL
 	vethLink := &netlink.Dummy{LinkAttrs: la}
 	err = netlink.LinkSetMaster(vethLink, bridge)
 	if err != nil {
-		log.Errorf("Failed to set veth link master: %v", err)
+		log.Errorf("Failed to set veth link %s master to %s: %v.",
+			vethLinkName, bridgeName, err)
 		return err
 	}
 
@@ -550,33 +531,99 @@ func (plugin *Plugin) createTapLink(bridgeName string, vethLinkName string, tapL
 	log.Infof("Creating tap link %+v.", tapLink)
 	err = netlink.LinkAdd(tapLink)
 	if err != nil {
-		log.Errorf("Failed to add tap link: %v", err)
+		log.Errorf("Failed to add tap link %s: %v.", tapLinkName, err)
 		return err
 	}
 
 	// Set tap link MTU.
 	err = netlink.LinkSetMTU(tapLink, vpc.JumboFrameMTU)
 	if err != nil {
-		log.Errorf("Failed to set tap link MTU: %v", err)
+		log.Errorf("Failed to set tap link %s MTU: %v.", tapLinkName, err)
 		return err
 	}
 
 	// Set tap link ownership.
-	log.Infof("Setting tap link owner to uid %d.", uid)
+	log.Infof("Setting tap link %s owner to uid %d.", tapLinkName, uid)
 	fd := int(tapLink.Fds[0].Fd())
 	err = unix.IoctlSetInt(fd, unix.TUNSETOWNER, uid)
 	if err != nil {
-		log.Errorf("Failed to set tap link owner: %v", err)
+		log.Errorf("Failed to set tap link %s owner: %v.", tapLinkName, err)
+		return err
+	}
+
+	// Set the bridge link operational state up
+	log.Infof("Setting bridge link %s state up.", bridgeName)
+	err = netlink.LinkSetUp(bridge)
+	if err != nil {
+		log.Errorf("Failed to set bridge link %s state: %v.", bridgeName, err)
 		return err
 	}
 
 	// Set tap link operational state up.
-	log.Info("Setting tap link state up.")
+	log.Infof("Setting tap link %s state up.", tapLinkName)
 	err = netlink.LinkSetUp(tapLink)
 	if err != nil {
-		log.Errorf("Failed to set tap link state: %v", err)
+		log.Errorf("Failed to set tap link %s state: %v.", tapLinkName, err)
+		return err
+	}
+
+	// Set the veth peer link operational state up
+	log.Infof("Setting veth peer link %s state up.", vethLinkName)
+	err = netlink.LinkSetUp(vethLink)
+	if err != nil {
+		log.Errorf("Failed to set veth peer %s link state: %v.", vethLinkName, err)
 		return err
 	}
 
 	return nil
+}
+
+// deleteTapVethInterfaces deletes tap link and veth peer link from the target
+// netns
+func (plugin *Plugin) deleteTapVethInterfaces(tapLinkName string,
+	targetNetNSName string,
+	vethPeerName string,
+	tapBridgeName string) {
+	// Search for the target network namespace.
+	targetNetNS, err := netns.GetNetNSByName(targetNetNSName)
+	if err != nil {
+		// Log and ignore the failure. DEL can be called multiple times and thus must be idempotent.
+		log.Errorf("Failed to find netns %s, ignoring: %v.", targetNetNSName, err)
+		return
+	}
+
+	// In target network namespace...
+	err = targetNetNS.Run(func() error {
+		// Delete the tap link.
+		la := netlink.NewLinkAttrs()
+		la.Name = tapLinkName
+		tapLink := &netlink.Tuntap{LinkAttrs: la}
+		log.Infof("Deleting tap link: %v.", tapLinkName)
+		err = netlink.LinkDel(tapLink)
+		if err != nil {
+			log.Errorf("Failed to delete tap link %s: %v.", tapLinkName, err)
+		}
+
+		// Delete the veth pair.
+		la = netlink.NewLinkAttrs()
+		la.Name = vethPeerName
+		vethLink := &netlink.Veth{LinkAttrs: la}
+		log.Infof("Deleting veth pair: %v.", vethPeerName)
+		err = netlink.LinkDel(vethLink)
+		if err != nil {
+			log.Errorf("Failed to delete veth pair %s: %v.", vethPeerName, err)
+		}
+
+		// Delete the tap bridge.
+		la = netlink.NewLinkAttrs()
+		la.Name = tapBridgeName
+		tapBridge := &netlink.Bridge{LinkAttrs: la}
+		log.Infof("Deleting tap bridge: %v.", tapBridgeName)
+		err = netlink.LinkDel(tapBridge)
+		if err != nil {
+			log.Errorf("Failed to delete tap bridge %s: %v.", tapBridgeName, err)
+		}
+
+		return nil
+	})
 }
