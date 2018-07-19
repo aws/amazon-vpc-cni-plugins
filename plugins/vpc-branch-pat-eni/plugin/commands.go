@@ -170,34 +170,37 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 
 	// Search for the PAT network namespace.
 	patNetNS, err := netns.GetNetNSByName(patNetNSName)
-	if err == nil {
-		lastVethLinkDeleted := false
-
-		// In PAT network namespace...
-		err = patNetNS.Run(func() error {
-			// Check whether there are any remaining veth links connected to this bridge.
-			ifaces, _ := net.Interfaces()
-			log.Infof("Number of remaining links: %v.", len(ifaces))
-			if len(ifaces) == 4 {
-				// Only VLAN link, bridge, dummy and loopback remain.
-				lastVethLinkDeleted = true
-			}
-
-			return nil
-		})
-
-		// If all veth links connected to this PAT bridge are deleted, clean up the PAT network
-		// namespace and all virtual interfaces in it. Otherwise, leave it running.
-		if lastVethLinkDeleted {
-			log.Infof("Deleting PAT network namespace: %v.", patNetNSName)
-			err = patNetNS.Close()
-			if err != nil {
-				log.Errorf("Failed to delete netns: %v.", err)
-			}
-		}
-	} else {
+	if err != nil {
 		// Log and ignore the failure. DEL can be called multiple times and thus must be idempotent.
 		log.Errorf("Failed to find netns %s, ignoring: %v.", patNetNSName, err)
+		return nil
+	}
+	lastVethLinkDeleted := false
+
+	// In PAT network namespace...
+	err = patNetNS.Run(func() error {
+		// Check whether there are any remaining veth links connected to this bridge.
+		ifaces, _ := net.Interfaces()
+		log.Infof("Number of remaining links: %v.", len(ifaces))
+		if len(ifaces) == 4 {
+			// Only VLAN link, bridge, dummy and loopback remain.
+			lastVethLinkDeleted = true
+		}
+
+		return nil
+	})
+
+	// If all veth links connected to this PAT bridge are deleted, clean up the PAT network
+	// namespace and all virtual interfaces in it. Otherwise, leave it running.
+	if lastVethLinkDeleted && netConfig.CleanupPATNetNS {
+		log.Infof("Deleting PAT network namespace: %v.", patNetNSName)
+		err = patNetNS.Close()
+		if err != nil {
+			log.Errorf("Failed to delete netns: %v.", err)
+		}
+	} else {
+		log.Infof("Skipping PAT network namespace deletion. Last veth link deleted: %t, cleanup PAT netns: %t.",
+			lastVethLinkDeleted, netConfig.CleanupPATNetNS)
 	}
 
 	return nil

@@ -23,13 +23,26 @@ import (
 )
 
 const (
-	config = `{"trunkName":"eth0", "branchVlanID":"10.11.12.13", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.0.1.42/24"}`
+	config = `
+{
+    "trunkName":"eth0",
+    "branchVlanID":"101",
+    "branchMACAddress":"01:23:45:67:89:ab",
+    "branchIPAddress":"10.0.1.42/24",
+    "cleanupPATNetNS": true
+}
+`
 )
 
 func TestValidConfig(t *testing.T) {
 	args := &skel.CmdArgs{
 		StdinData: []byte(config),
 	}
-	_, err := New(args, false)
+	netConfig, err := New(args, false)
 	assert.NoError(t, err)
+	assert.Equal(t, "eth0", netConfig.TrunkName)
+	assert.Equal(t, "101", netConfig.BranchVlanID)
+	assert.Equal(t, "01:23:45:67:89:ab", netConfig.BranchMACAddress)
+	assert.Equal(t, "10.0.1.42/24", netConfig.BranchIPAddress)
+	assert.True(t, netConfig.CleanupPATNetNS)
 }
