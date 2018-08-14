@@ -48,6 +48,40 @@ func (eni *ENI) GetLinkName() string {
 	return eni.linkName
 }
 
+// Attach attaches the ENI to a link.
+func (eni *ENI) Attach() error {
+	iface, err := net.InterfaceByName(eni.linkName)
+	if err != nil {
+		return fmt.Errorf("Invalid link name")
+	}
+
+	eni.linkIndex = iface.Index
+
+	return nil
+}
+
+// Detach detaches the ENI from a link.
+func (eni *ENI) Detach() error {
+	eni.linkIndex = 0
+	return nil
+}
+
+// SetName sets the name of the ENI.
+func (eni *ENI) SetName(name string) error {
+	la := netlink.NewLinkAttrs()
+	la.Name = eni.linkName
+	link := &netlink.Dummy{LinkAttrs: la}
+	err := netlink.LinkSetName(link, name)
+
+	if err != nil {
+		return err
+	}
+
+	eni.linkName = name
+
+	return nil
+}
+
 // SetOpState sets the operational state of the ENI.
 func (eni *ENI) SetOpState(up bool) error {
 	var err error
@@ -75,20 +109,33 @@ func (eni *ENI) SetNetNS(ns netns.NetNS) error {
 	return err
 }
 
-// Attach attaches the ENI to a link.
-func (eni *ENI) Attach() error {
-	iface, err := net.InterfaceByName(eni.linkName)
+// SetMACAddress sets the MAC address of the ENI.
+func (eni *ENI) SetMACAddress(address net.HardwareAddr) error {
+	la := netlink.NewLinkAttrs()
+	la.Name = eni.linkName
+	link := &netlink.Dummy{LinkAttrs: la}
+
+	err := netlink.LinkSetHardwareAddr(link, address)
 	if err != nil {
-		return fmt.Errorf("Invalid link name")
+		return err
 	}
 
-	eni.linkIndex = iface.Index
+	eni.macAddress = address
 
 	return nil
 }
 
-// Detach detaches the ENI from a link.
-func (eni *ENI) Detach() error {
-	eni.linkIndex = 0
+// SetIPAddress assigns the given IP address to the ENI.
+func (eni *ENI) SetIPAddress(address *net.IPNet) error {
+	la := netlink.NewLinkAttrs()
+	la.Index = eni.linkIndex
+	link := &netlink.Dummy{LinkAttrs: la}
+	addr := &netlink.Addr{IPNet: address}
+
+	err := netlink.AddrAdd(link, addr)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

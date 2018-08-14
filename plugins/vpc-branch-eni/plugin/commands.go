@@ -73,15 +73,8 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		return err
 	}
 
-	if netConfig.InterfaceType == config.IfTypeVLAN {
-		// Container is running on this host.
-		// Return directly the branch ENI in the target network namespace.
-		branchName = ifName
-	} else if netConfig.InterfaceType == config.IfTypeTAP {
-		// Container is running in a VM.
-		// Connect the branch ENI to a TAP link in the target network namespace.
-
-		// Lookup the user ID for TAP link.
+	// Lookup the user ID for TAP link ownership.
+	if netConfig.InterfaceType == config.IfTypeTAP {
 		uid, err = plugin.CNIPlugin.LookupUser(netConfig.UserName)
 		if err != nil {
 			log.Errorf("Failed to lookup user %s: %v.", netConfig.UserName, err)
@@ -105,7 +98,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	}
 
 	// Create a link for the branch ENI.
-	log.Infof("Creating branch link %s", branchName)
+	log.Infof("Creating branch link %s.", branchName)
 	overrideMAC := netConfig.InterfaceType == config.IfTypeVLAN
 	err = branch.AttachToLink(overrideMAC)
 	if err != nil {
@@ -121,31 +114,38 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		return err
 	}
 
-	// If the container is running in a VM, wrap the branch link with a MACVTAP or TAP link.
-	if netConfig.InterfaceType != config.IfTypeVLAN {
-		// In target network namespace...
-		err = ns.Run(func() error {
-			if netConfig.InterfaceType == config.IfTypeTAP {
-				err = plugin.createTAPLink(bridgeName, branchName, ifName, uid)
-			} else {
-				err = plugin.createMACVTAPLink(ifName, branch.GetLinkIndex())
-			}
-			return err
-		})
-
-		if err != nil {
-			log.Errorf("Failed to create TAP link: %v.", err)
-			return err
-		}
-	}
-
-	// Set branch link operational state up.
-	log.Infof("Setting branch link state up.")
+	// Complete the remaining setup in target network namespace.
 	err = ns.Run(func() error {
-		return branch.SetOpState(true)
+		// Create the container-facing link based on the requested interface type.
+		switch netConfig.InterfaceType {
+		case config.IfTypeVLAN:
+			// Container is running in a network namespace on this host.
+			err = plugin.createVLANLink(branch, branchName, ifName, netConfig.BranchIPAddress)
+		case config.IfTypeTAP:
+			// Container is running in a VM.
+			// Connect the branch ENI to a TAP link in the target network namespace.
+			err = plugin.createTAPLink(bridgeName, branchName, ifName, uid)
+		case config.IfTypeMACVTAP:
+			// Container is running in a VM.
+			// Connect the branch ENI to a MACVTAP link in the target network namespace.
+			err = plugin.createMACVTAPLink(ifName, branch.GetLinkIndex())
+		}
+
+		// Set branch link operational state up. VLAN interfaces were already brought up above.
+		if netConfig.InterfaceType != config.IfTypeVLAN && err != nil {
+			log.Infof("Setting branch link state up.")
+			err = branch.SetOpState(true)
+			if err != nil {
+				log.Errorf("Failed to set branch link state: %v.", err)
+				return err
+			}
+		}
+
+		return err
 	})
+
 	if err != nil {
-		log.Errorf("Failed to set branch link state: %v.", err)
+		log.Errorf("Failed to setup the link: %v.", err)
 		return err
 	}
 
@@ -178,7 +178,12 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	log.Infof("Executing DEL with netconfig: %+v.", netConfig)
 
 	// Derive names from CNI network config.
-	branchName := fmt.Sprintf(branchLinkNameFormat, netConfig.TrunkName, netConfig.BranchVlanID)
+	var branchName string
+	if netConfig.InterfaceType == config.IfTypeVLAN {
+		branchName = args.IfName
+	} else {
+		branchName = fmt.Sprintf(branchLinkNameFormat, netConfig.TrunkName, netConfig.BranchVlanID)
+	}
 	tapBridgeName := fmt.Sprintf(bridgeNameFormat, netConfig.BranchVlanID)
 	tapLinkName := args.IfName
 	netnsName := args.Netns
@@ -228,6 +233,60 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	} else {
 		// Log and ignore the failure. DEL can be called multiple times and thus must be idempotent.
 		log.Errorf("Failed to find netns %s, ignoring: %v.", netnsName, err)
+	}
+
+	return nil
+}
+
+// createVLANLink creates a VLAN link in the target network namespace.
+func (plugin *Plugin) createVLANLink(branch *eni.Branch, branchName string, ifName string, ipAddress string) error {
+	branchIPAddress, _ := vpc.GetIPAddressFromString(ipAddress)
+	_, subnetPrefix, _ := net.ParseCIDR(ipAddress)
+
+	// Rename the branch link to the requested interface name.
+	log.Infof("Renaming branch link %s to %s.", branchName, ifName)
+	err := branch.SetName(ifName)
+	if err != nil {
+		log.Errorf("Failed to rename branch link: %v.", err)
+		return err
+	}
+
+	// Set branch link operational state up.
+	log.Infof("Setting branch link state up.")
+	err = branch.SetOpState(true)
+	if err != nil {
+		log.Errorf("Failed to set branch link state: %v.", err)
+		return err
+	}
+
+	// Set branch IP address and default gateway if specified.
+	if branchIPAddress != nil {
+		// Assign the IP address.
+		log.Infof("Assigning IP address %v to branch link.", branchIPAddress)
+		err = branch.SetIPAddress(branchIPAddress)
+		if err != nil {
+			log.Errorf("Failed to assign IP address to branch link: %v.", err)
+			return err
+		}
+
+		// Parse VPC subnet.
+		subnet, err := vpc.NewSubnet(subnetPrefix)
+		if err != nil {
+			log.Errorf("Failed to parse VPC subnet: %v.", err)
+			return err
+		}
+
+		// Add default route via branch link.
+		route := &netlink.Route{
+			Gw:        subnet.Gateways[0],
+			LinkIndex: branch.GetLinkIndex(),
+		}
+		log.Infof("Adding default route %+v.", route)
+		err = netlink.RouteAdd(route)
+		if err != nil {
+			log.Errorf("Failed to add IP route: %v.", err)
+			return err
+		}
 	}
 
 	return nil

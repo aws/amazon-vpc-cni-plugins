@@ -64,8 +64,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	branchVlanID, _ := strconv.Atoi(netConfig.BranchVlanID)
 
 	// Compute the branch ENI's VPC subnet.
-	// TODO: error handling here
-	branchSubnet, err := vpc.NewSubnet(netConfig.BranchIPAddress)
+	branchSubnet, _ := vpc.NewSubnetFromString(netConfig.BranchIPAddress)
 	branchIPAddress, _ := vpc.GetIPAddressFromString(netConfig.BranchIPAddress)
 
 	vethLinkName := fmt.Sprintf(vethLinkNameFormat, netConfig.BranchVlanID, args.ContainerID)
@@ -165,8 +164,8 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	tapLinkName := args.IfName
 	targetNetNSName := args.Netns
 
-	// Delete the tap link and vethpair device from the target netns
-	plugin.deleteTapVethInterfaces(tapLinkName, targetNetNSName, vethPeerName, tapBridgeName)
+	// Delete the tap link and veth pair from the target netns.
+	plugin.deleteTapVethLinks(targetNetNSName, tapLinkName, vethPeerName, tapBridgeName)
 
 	// Search for the PAT network namespace.
 	patNetNS, err := netns.GetNetNSByName(patNetNSName)
@@ -199,15 +198,14 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 			log.Errorf("Failed to delete netns: %v.", err)
 		}
 	} else {
-		log.Infof("Skipping PAT network namespace deletion. Last veth link deleted: %t, cleanup PAT netns: %t.",
+		log.Infof("Skipping PAT netns deletion. Last veth link deleted: %t, cleanup PAT netns: %t.",
 			lastVethLinkDeleted, netConfig.CleanupPATNetNS)
 	}
 
 	return nil
 }
 
-// createPATNetworkNamespace creates the pat network namespace for the specified
-// branch interface
+// createPATNetworkNamespace creates the PAT network namespace for the specified branch interface.
 func (plugin *Plugin) createPATNetworkNamespace(
 	patNetNSName string,
 	trunk *eni.Trunk,
@@ -346,8 +344,7 @@ func (plugin *Plugin) setupPATNetworkNamespace(
 	log.Infof("Setting branch link state up in PAT netns %s.", patNetNSName)
 	err = branch.SetOpState(true)
 	if err != nil {
-		log.Errorf("Failed to set branch link state in PAT netns %s: %v.",
-			patNetNSName, err)
+		log.Errorf("Failed to set branch link state in PAT netns %s: %v.", patNetNSName, err)
 		return err
 	}
 
@@ -432,8 +429,10 @@ func (plugin *Plugin) setupIptablesRules(bridgeName, bridgeSubnet, branchLinkNam
 
 // createVethPair creates a veth pair to connect a PAT network namespace to a target network namespace.
 func (plugin *Plugin) createVethPair(
-	bridgeName string, targetNetNS netns.NetNS,
-	vethLinkName string, vethPeerName string) error {
+	bridgeName string,
+	targetNetNS netns.NetNS,
+	vethLinkName string,
+	vethPeerName string) error {
 	// Find the PAT bridge.
 	bridge, err := net.InterfaceByName(bridgeName)
 	if err != nil {
@@ -581,10 +580,10 @@ func (plugin *Plugin) createTapLink(
 	return nil
 }
 
-// deleteTapVethInterfaces deletes tap link and veth peer link from the target
-// netns
-func (plugin *Plugin) deleteTapVethInterfaces(tapLinkName string,
+// deleteTapVethInterfaces deletes tap link and veth peer link from the target netns.
+func (plugin *Plugin) deleteTapVethLinks(
 	targetNetNSName string,
+	tapLinkName string,
 	vethPeerName string,
 	tapBridgeName string) {
 	// Search for the target network namespace.

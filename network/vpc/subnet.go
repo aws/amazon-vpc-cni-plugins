@@ -34,12 +34,7 @@ type Subnet struct {
 }
 
 // NewSubnet creates a new VPC subnet object given its prefix.
-func NewSubnet(subnetPrefix string) (*Subnet, error) {
-	_, prefix, err := net.ParseCIDR(subnetPrefix)
-	if err != nil {
-		return nil, err
-	}
-
+func NewSubnet(prefix *net.IPNet) (*Subnet, error) {
 	// Compute default gateway address.
 	gateway := ComputeIPAddress(prefix, defaultGatewayHostID)
 
@@ -49,6 +44,18 @@ func NewSubnet(subnetPrefix string) (*Subnet, error) {
 	}
 
 	return subnet, nil
+}
+
+// NewSubnetFromString creates a new VPC subnet object given its prefix as a string.
+func NewSubnetFromString(prefixString string) (*Subnet, error) {
+	_, prefix, err := net.ParseCIDR(prefixString)
+	if err != nil {
+		return nil, err
+	}
+
+	subnet, err := NewSubnet(prefix)
+
+	return subnet, err
 }
 
 // GetIPAddressFromString returns an IP address with prefix length.
@@ -65,11 +72,13 @@ func GetIPAddressFromString(ipAddress string) (*net.IPNet, error) {
 
 // ComputeIPAddress computes an IP address given its subnet prefix and host ID.
 func ComputeIPAddress(prefix *net.IPNet, hostID net.IP) net.IP {
-	//log.Printf("prefix=%v hostid=%v lenhostid=%v", prefix, hostID, len(hostID))
-	for i := 0; i < len(hostID); i++ {
-		//log.Printf("i=%v", i)
-		hostID[i] |= prefix.IP[i]
+	// Always treat as IPv6 address to ensure compatibility with both IPv4 and IPv6.
+	prefixIP := prefix.IP.To16()
+	hostIP := hostID.To16()
+
+	for i := 0; i < len(hostIP); i++ {
+		hostIP[i] |= prefixIP[i]
 	}
 
-	return hostID
+	return hostIP
 }

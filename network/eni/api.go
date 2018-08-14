@@ -14,17 +14,23 @@
 package eni
 
 import (
+	"net"
+
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 )
 
 // API interface abstracts a generic EC2 VPC Elastic Network Interface (ENI).
 // https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html
 type API interface {
-	GetIndex() int
-
-	SetOpState(bool) error
-	SetNetNS(netns.NetNS) error
+	GetLinkIndex() int
+	GetLinkName() string
 
 	Attach() error
 	Detach() error
+
+	SetName(name string) error
+	SetOpState(up bool) error
+	SetNetNS(ns netns.NetNS) error
+	SetMACAddress(address net.HardwareAddr) error
+	SetIPAddress(address *net.IPNet) error
 }

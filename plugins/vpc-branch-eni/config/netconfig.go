@@ -29,6 +29,7 @@ type NetConfig struct {
 	TrunkName        string `json:"trunkName"`
 	BranchVlanID     string `json:"branchVlanID"`
 	BranchMACAddress string `json:"branchMACAddress"`
+	BranchIPAddress  string `json:"branchIPAddress"`
 	InterfaceType    string `json:"interfaceType"`
 	UserName         string `json:"userName"`
 }
@@ -66,6 +67,13 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	// Validate if the MAC address is valid.
 	if _, err := net.ParseMAC(config.BranchMACAddress); err != nil {
 		return nil, fmt.Errorf("invalid branchMACAddress %s", config.BranchMACAddress)
+	}
+
+	// Validate if the optional IP address is valid.
+	if config.BranchIPAddress != "" {
+		if _, _, err := net.ParseCIDR(config.BranchIPAddress); err != nil {
+			return nil, fmt.Errorf("invalid branchIPAddress %s", config.BranchIPAddress)
+		}
 	}
 
 	// Validation complete. Return the parsed config object.
