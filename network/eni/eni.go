@@ -48,11 +48,16 @@ func (eni *ENI) GetLinkName() string {
 	return eni.linkName
 }
 
+// String returns a string representation of the ENI.
+func (eni *ENI) String() string {
+	return fmt.Sprintf("{linkName:%s macAddress:%s}", eni.linkName, eni.macAddress)
+}
+
 // Attach attaches the ENI to a link.
 func (eni *ENI) Attach() error {
 	iface, err := net.InterfaceByName(eni.linkName)
 	if err != nil {
-		return fmt.Errorf("Invalid link name")
+		return err
 	}
 
 	eni.linkIndex = iface.Index

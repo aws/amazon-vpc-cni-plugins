@@ -116,6 +116,8 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	// Complete the remaining setup in target network namespace.
 	err = ns.Run(func() error {
+		var err error
+
 		// Create the container-facing link based on the requested interface type.
 		switch netConfig.InterfaceType {
 		case config.IfTypeVLAN:
@@ -136,7 +138,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 			log.Infof("Setting branch link state up.")
 			err = branch.SetOpState(true)
 			if err != nil {
-				log.Errorf("Failed to set branch link state: %v.", err)
+				log.Errorf("Failed to set branch link %v state: %v.", branch, err)
 				return err
 			}
 		}
@@ -244,10 +246,10 @@ func (plugin *Plugin) createVLANLink(branch *eni.Branch, branchName string, ifNa
 	_, subnetPrefix, _ := net.ParseCIDR(ipAddress)
 
 	// Rename the branch link to the requested interface name.
-	log.Infof("Renaming branch link %s to %s.", branchName, ifName)
+	log.Infof("Renaming branch link %v to %s.", branch, ifName)
 	err := branch.SetName(ifName)
 	if err != nil {
-		log.Errorf("Failed to rename branch link: %v.", err)
+		log.Errorf("Failed to rename branch link %v: %v.", branch, err)
 		return err
 	}
 
@@ -255,7 +257,7 @@ func (plugin *Plugin) createVLANLink(branch *eni.Branch, branchName string, ifNa
 	log.Infof("Setting branch link state up.")
 	err = branch.SetOpState(true)
 	if err != nil {
-		log.Errorf("Failed to set branch link state: %v.", err)
+		log.Errorf("Failed to set branch link %v state: %v.", branch, err)
 		return err
 	}
 
@@ -265,14 +267,14 @@ func (plugin *Plugin) createVLANLink(branch *eni.Branch, branchName string, ifNa
 		log.Infof("Assigning IP address %v to branch link.", branchIPAddress)
 		err = branch.SetIPAddress(branchIPAddress)
 		if err != nil {
-			log.Errorf("Failed to assign IP address to branch link: %v.", err)
+			log.Errorf("Failed to assign IP address to branch link %v: %v.", branch, err)
 			return err
 		}
 
 		// Parse VPC subnet.
 		subnet, err := vpc.NewSubnet(subnetPrefix)
 		if err != nil {
-			log.Errorf("Failed to parse VPC subnet: %v.", err)
+			log.Errorf("Failed to parse VPC subnet %s: %v.", subnetPrefix, err)
 			return err
 		}
 
@@ -281,10 +283,10 @@ func (plugin *Plugin) createVLANLink(branch *eni.Branch, branchName string, ifNa
 			Gw:        subnet.Gateways[0],
 			LinkIndex: branch.GetLinkIndex(),
 		}
-		log.Infof("Adding default route %+v.", route)
+		log.Infof("Adding default IP route %+v.", route)
 		err = netlink.RouteAdd(route)
 		if err != nil {
-			log.Errorf("Failed to add IP route: %v.", err)
+			log.Errorf("Failed to add IP route %+v via branch %v: %v.", route, branch, err)
 			return err
 		}
 	}

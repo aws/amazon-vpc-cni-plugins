@@ -53,9 +53,7 @@ func NewSubnetFromString(prefixString string) (*Subnet, error) {
 		return nil, err
 	}
 
-	subnet, err := NewSubnet(prefix)
-
-	return subnet, err
+	return NewSubnet(prefix)
 }
 
 // GetIPAddressFromString returns an IP address with prefix length.
