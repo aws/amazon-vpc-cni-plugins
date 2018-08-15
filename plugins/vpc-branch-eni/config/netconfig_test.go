@@ -22,14 +22,74 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const (
-	config = `{"trunkName":"eth0", "branchVlanID":"10.11.12.13", "branchMACAddress":"01:23:45:67:89:ab"}`
+type config struct {
+	netConfig string
+	pcArgs    string
+}
+
+var (
+	validConfigs = []config{
+		config{
+			netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14"}`,
+			pcArgs:    "",
+		},
+		config{
+			netConfig: `{"trunkName":"eth1"}`,
+			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
+		},
+	}
+
+	invalidConfigs = []config{
+		config{
+			netConfig: `{"trunkName":"eth1"}`,
+			pcArgs:    "BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1/16",
+		},
+		config{
+			netConfig: `{"trunkName":"eth1"}`,
+			pcArgs:    "BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
+		},
+	}
 )
 
-func TestValidConfig(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(config),
+// TestValidConfigs tests that valid configs succeed.
+func TestValidConfigs(t *testing.T) {
+	for _, config := range validConfigs {
+		args := &skel.CmdArgs{
+			StdinData: []byte(config.netConfig),
+			Args:      config.pcArgs,
+		}
+		_, err := New(args)
+		assert.NoError(t, err)
 	}
-	_, err := New(args)
+}
+
+// TestInvalidConfigs tests that invalid configs fail.
+func TestInvalidConfigs(t *testing.T) {
+	// Test all invalid configs.
+	for _, config := range invalidConfigs {
+		args := &skel.CmdArgs{
+			StdinData: []byte(config.netConfig),
+			Args:      config.pcArgs,
+		}
+		_, err := New(args)
+		assert.Error(t, err)
+	}
+}
+
+// TestPerContainerArgsOverrideNetConfig tests that per-container args override per-network args.
+func TestPerContainerArgsOverrideNetConfig(t *testing.T) {
+	c := config{
+		netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14"}`,
+		pcArgs:    "BranchVlanID=42;BranchMACAddress=44:44:44:55:55:55;BranchIPAddress=192.168.1.2/16",
+	}
+
+	args := &skel.CmdArgs{
+		StdinData: []byte(c.netConfig),
+		Args:      c.pcArgs,
+	}
+	nc, err := New(args)
 	assert.NoError(t, err)
+	assert.Equal(t, "42", nc.BranchVlanID, "invalid vlanid")
+	assert.Equal(t, "44:44:44:55:55:55", nc.BranchMACAddress, "invalid macaddress")
+	assert.Equal(t, "192.168.1.2/16", nc.BranchIPAddress, "invalid ipaddress")
 }

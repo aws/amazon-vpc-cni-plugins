@@ -34,18 +34,51 @@ type NetConfig struct {
 	UserName         string `json:"userName"`
 }
 
+// pcArgs defines the per-container arguments passed in CNI_ARGS environment variable.
+type pcArgs struct {
+	cniTypes.CommonArgs
+	BranchVlanID     cniTypes.UnmarshallableString
+	BranchMACAddress cniTypes.UnmarshallableString
+	BranchIPAddress  cniTypes.UnmarshallableString
+}
+
 const (
 	// Interface type values.
 	IfTypeVLAN    = "vlan"
 	IfTypeTAP     = "tap"
 	IfTypeMACVTAP = "macvtap"
+
+	// Whether the plugin ignores unknown per-container arguments.
+	ignoreUnknown = true
 )
 
 // New creates a new NetConfig object by parsing the given CNI arguments.
 func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
+	// Parse network configuration.
 	var config NetConfig
 	if err := json.Unmarshal(args.StdinData, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse network config: %v", err)
+	}
+
+	// Parse optional per-container arguments.
+	if args.Args != "" {
+		var pca pcArgs
+		pca.IgnoreUnknown = ignoreUnknown
+
+		if err := cniTypes.LoadArgs(args.Args, &pca); err != nil {
+			return nil, fmt.Errorf("failed to parse per-container args: %v", err)
+		}
+
+		// Per-container arguments override the ones from network configuration.
+		if pca.BranchVlanID != "" {
+			config.BranchVlanID = string(pca.BranchVlanID)
+		}
+		if pca.BranchMACAddress != "" {
+			config.BranchMACAddress = string(pca.BranchMACAddress)
+		}
+		if pca.BranchIPAddress != "" {
+			config.BranchIPAddress = string(pca.BranchIPAddress)
+		}
 	}
 
 	// Validate if all the required fields are present.
