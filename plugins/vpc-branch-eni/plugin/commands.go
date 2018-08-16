@@ -67,7 +67,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	// Find the network namespace.
 	log.Infof("Searching for netns %s.", netnsName)
-	ns, err := netns.GetNetNSByName(netnsName)
+	ns, err := netns.GetNetNS(netnsName)
 	if err != nil {
 		log.Errorf("Failed to find netns %s: %v.", netnsName, err)
 		return err
@@ -107,7 +107,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	}
 
 	// Move branch ENI to the network namespace.
-	log.Infof("Moving branch link to network namespace.")
+	log.Infof("Moving branch link %s to netns %s.", branch, netnsName)
 	err = branch.SetNetNS(ns)
 	if err != nil {
 		log.Errorf("Failed to move branch link: %v.", err)
@@ -191,7 +191,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	netnsName := args.Netns
 
 	// Search for the target network namespace.
-	netns, err := netns.GetNetNSByName(netnsName)
+	netns, err := netns.GetNetNS(netnsName)
 	if err == nil {
 		// In target network namespace...
 		err = netns.Run(func() error {

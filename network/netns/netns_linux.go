@@ -18,6 +18,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strings"
 	"sync"
 
 	"golang.org/x/sys/unix"
@@ -91,6 +92,16 @@ func NewNetNS(name string) (NetNS, error) {
 	}
 
 	return &netNS{file: fd, mounted: true}, nil
+}
+
+// GetNetNS creates a new netNS object representing an existing netns.
+// Call the GetNetNSByName or GetNetNSByPath function directly if the input type is known.
+func GetNetNS(nameOrPath string) (NetNS, error) {
+	if strings.Contains(nameOrPath, "/") {
+		return GetNetNSByPath(nameOrPath)
+	} else {
+		return GetNetNSByName(nameOrPath)
+	}
 }
 
 // GetNetNSByName creates a new netNS object representing an existing netns by name.
