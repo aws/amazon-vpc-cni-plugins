@@ -16,7 +16,7 @@ package plugin
 import cniVersion "github.com/containernetworking/cni/pkg/version"
 
 // specVersionSupported is the version of the CNI spec that is supported.
-var specVersionSupported = cniVersion.PluginSupports("0.3.1")
+var specVersionSupported = cniVersion.PluginSupports("0.3.0", "0.3.1")
 
 // GetSpecVersionSupported gets the version of the CNI spec that is supported.
 func GetSpecVersionSupported() cniVersion.PluginInfo {
