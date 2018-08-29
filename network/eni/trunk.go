@@ -36,25 +36,28 @@ type Trunk struct {
 	branches      []Branch
 }
 
-// NewTrunk creates a new Trunk object.
-func NewTrunk(linkName string, isolationMode IsolationMode) (*Trunk, error) {
+// NewTrunk creates a new Trunk object. One of linkName or macAddress must be specified.
+func NewTrunk(linkName string, macAddress net.HardwareAddr, isolationMode IsolationMode) (*Trunk, error) {
+	// Trunk ENI specific validations.
 	if isolationMode != TrunkIsolationModeVLAN {
 		log.Errorf("Invalid isolation mode: %v", isolationMode)
-		return nil, fmt.Errorf("Invalid isolation mode")
+		return nil, fmt.Errorf("invalid isolation mode")
 	}
 
-	trunkInterface, err := net.InterfaceByName(linkName)
+	eni, err := NewENI(linkName, macAddress)
 	if err != nil {
-		log.Errorf("Failed to find trunk interface %s: %v", linkName, err)
-		return nil, fmt.Errorf("Invalid link name")
+		return nil, err
+	}
+	trunk := &Trunk{
+		ENI:           *eni,
+		isolationMode: isolationMode,
 	}
 
-	trunk := &Trunk{
-		ENI: ENI{
-			linkIndex: trunkInterface.Index,
-			linkName:  linkName,
-		},
-		isolationMode: isolationMode,
+	// Trunk interfaces start attached.
+	err = trunk.Attach()
+	if err != nil {
+		log.Errorf("Failed to find trunk interface %s: %v", &trunk.ENI, err)
+		return nil, err
 	}
 
 	return trunk, nil

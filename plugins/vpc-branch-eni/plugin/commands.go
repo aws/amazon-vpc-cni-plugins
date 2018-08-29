@@ -57,7 +57,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	// Derive names from CNI network config.
 	// All fields have already been validated during parsing.
-	branchName := fmt.Sprintf(branchLinkNameFormat, netConfig.TrunkName, netConfig.BranchVlanID)
+	trunkMACAddress, _ := net.ParseMAC(netConfig.TrunkMACAddress)
 	branchMACAddress, _ := net.ParseMAC(netConfig.BranchMACAddress)
 	branchVlanID, _ := strconv.Atoi(netConfig.BranchVlanID)
 	bridgeName := fmt.Sprintf(bridgeNameFormat, netConfig.BranchVlanID)
@@ -84,13 +84,14 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	}
 
 	// Create the trunk ENI.
-	trunk, err := eni.NewTrunk(netConfig.TrunkName, eni.TrunkIsolationModeVLAN)
+	trunk, err := eni.NewTrunk(netConfig.TrunkName, trunkMACAddress, eni.TrunkIsolationModeVLAN)
 	if err != nil {
 		log.Errorf("Failed to find trunk interface %s: %v.", netConfig.TrunkName, err)
 		return err
 	}
 
 	// Create the branch ENI.
+	branchName := fmt.Sprintf(branchLinkNameFormat, trunk.GetLinkName(), netConfig.BranchVlanID)
 	branch, err := eni.NewBranch(trunk, branchName, branchMACAddress, branchVlanID)
 	if err != nil {
 		log.Errorf("Failed to create branch interface %s: %v.", branchName, err)
@@ -169,6 +170,8 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 }
 
 // Del is the internal implementation of CNI DEL command.
+// CNI DEL command can be called by the orchestrator agent multiple times for the same interface,
+// and thus must be best-effort and idempotent.
 func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	// Parse network configuration.
 	netConfig, err := config.New(args)
@@ -184,6 +187,17 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	if netConfig.InterfaceType == config.IfTypeVLAN {
 		branchName = args.IfName
 	} else {
+		// Find the trunk link name if not known.
+		if netConfig.TrunkName == "" {
+			trunkMACAddress, _ := net.ParseMAC(netConfig.TrunkMACAddress)
+			trunk, err := eni.NewTrunk("", trunkMACAddress, eni.TrunkIsolationModeVLAN)
+			if err != nil {
+				// Log and ignore the failure.
+				log.Errorf("Failed to find trunk with MAC address %v: %v.", trunkMACAddress, err)
+				return nil
+			}
+			netConfig.TrunkName = trunk.GetLinkName()
+		}
 		branchName = fmt.Sprintf(branchLinkNameFormat, netConfig.TrunkName, netConfig.BranchVlanID)
 	}
 	tapBridgeName := fmt.Sprintf(bridgeNameFormat, netConfig.BranchVlanID)

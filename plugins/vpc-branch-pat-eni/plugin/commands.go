@@ -59,7 +59,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	// All fields have already been validated during parsing.
 	patNetNSName := fmt.Sprintf(patNetNSNameFormat, netConfig.BranchVlanID)
 	bridgeIPAddress, _ := vpc.GetIPAddressFromString(bridgeIPAddressString)
-	branchName := fmt.Sprintf(branchLinkNameFormat, netConfig.TrunkName, netConfig.BranchVlanID)
+	trunkMACAddress, _ := net.ParseMAC(netConfig.TrunkMACAddress)
 	branchMACAddress, _ := net.ParseMAC(netConfig.BranchMACAddress)
 	branchVlanID, _ := strconv.Atoi(netConfig.BranchVlanID)
 
@@ -90,7 +90,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	log.Infof("Lookup for username %s returned uid %d.", netConfig.UserName, uid)
 
 	// Create the trunk ENI.
-	trunk, err := eni.NewTrunk(netConfig.TrunkName, eni.TrunkIsolationModeVLAN)
+	trunk, err := eni.NewTrunk(netConfig.TrunkName, trunkMACAddress, eni.TrunkIsolationModeVLAN)
 	if err != nil {
 		log.Errorf("Failed to find trunk interface %s: %v.", netConfig.TrunkName, err)
 		return err
@@ -100,11 +100,16 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	log.Infof("Searching for PAT netns %s.", patNetNSName)
 	patNetNS, err := netns.GetNetNSByName(patNetNSName)
 	if err != nil {
+		// This is the first PAT interface request on this VLAN ID.
+		// Create the PAT network namespace.
+		branchName := fmt.Sprintf(branchLinkNameFormat, trunk.GetLinkName(), netConfig.BranchVlanID)
+
 		patNetNS, err = plugin.createPATNetworkNamespace(
 			patNetNSName, trunk,
 			branchName, branchMACAddress, branchVlanID,
 			branchIPAddress, branchSubnet, bridgeIPAddress)
 	} else {
+		// Reuse the PAT network namespace that was setup on this VLAN ID during a previous request.
 		log.Infof("Found PAT netns %s.", patNetNSName)
 	}
 
@@ -146,6 +151,8 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 }
 
 // Del is the internal implementation of CNI DEL command.
+// CNI DEL command can be called by the orchestrator agent multiple times for the same interface,
+// and thus must be best-effort and idempotent.
 func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	// Parse network configuration.
 	netConfig, err := config.New(args, false)

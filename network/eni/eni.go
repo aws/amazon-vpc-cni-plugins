@@ -18,7 +18,9 @@ import (
 	"net"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
+	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
+	log "github.com/cihub/seelog"
 	"github.com/vishvananda/netlink"
 )
 
@@ -29,10 +31,15 @@ type ENI struct {
 	macAddress net.HardwareAddr
 }
 
-// NewENI creates a new ENI object.
-func NewENI(linkName string) (*ENI, error) {
+// NewENI creates a new ENI object. One of linkName or macAddress must be specified.
+func NewENI(linkName string, macAddress net.HardwareAddr) (*ENI, error) {
+	if linkName == "" && macAddress == nil {
+		return nil, fmt.Errorf("missing linkName and macAddress")
+	}
+
 	eni := &ENI{
-		linkName: linkName,
+		linkName:   linkName,
+		macAddress: macAddress,
 	}
 
 	return eni, nil
@@ -55,12 +62,39 @@ func (eni *ENI) String() string {
 
 // Attach attaches the ENI to a link.
 func (eni *ENI) Attach() error {
-	iface, err := net.InterfaceByName(eni.linkName)
-	if err != nil {
-		return err
+	var iface *net.Interface
+	var err error
+
+	if eni.linkName != "" {
+		// Find the interface by name.
+		iface, err = net.InterfaceByName(eni.linkName)
+		if err != nil {
+			log.Errorf("Failed to find interface with name %s: %v", eni.linkName, err)
+			return err
+		}
+	} else {
+		// Find the interface by MAC address.
+		interfaces, err := net.Interfaces()
+		if err != nil {
+			return err
+		}
+
+		for _, i := range interfaces {
+			if vpc.CompareMACAddress(i.HardwareAddr, eni.macAddress) {
+				iface = &i
+				break
+			}
+		}
+
+		if iface == nil {
+			log.Errorf("Failed to find interface with MAC address %s: %v", eni.macAddress, err)
+			return fmt.Errorf("invalid MAC address")
+		}
 	}
 
 	eni.linkIndex = iface.Index
+	eni.linkName = iface.Name
+	eni.macAddress = iface.HardwareAddr
 
 	return nil
 }
