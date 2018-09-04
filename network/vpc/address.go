@@ -17,6 +17,18 @@ import (
 	"net"
 )
 
+// GetIPAddressFromString converts an IP address CIDR string to a net.IPNet structure.
+func GetIPAddressFromString(ipAddress string) (*net.IPNet, error) {
+	address, prefix, err := net.ParseCIDR(ipAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	prefix.IP = address
+
+	return prefix, nil
+}
+
 // CompareMACAddress returns whether two MAC addresses are equal.
 func CompareMACAddress(addr1, addr2 net.HardwareAddr) bool {
 	if len(addr1) != len(addr2) {

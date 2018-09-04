@@ -17,6 +17,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
+
+	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
@@ -26,13 +29,27 @@ import (
 // NetConfig defines the network configuration for the vpc-branch-eni plugin.
 type NetConfig struct {
 	cniTypes.NetConf
-	TrunkName        string `json:"trunkName"`
-	TrunkMACAddress  string `json:"trunkMACAddress"`
-	BranchVlanID     string `json:"branchVlanID"`
-	BranchMACAddress string `json:"branchMACAddress"`
-	BranchIPAddress  string `json:"branchIPAddress"`
-	InterfaceType    string `json:"interfaceType"`
-	UserName         string `json:"userName"`
+	TrunkName              string
+	TrunkMACAddress        net.HardwareAddr
+	BranchVlanID           int
+	BranchMACAddress       net.HardwareAddr
+	BranchIPAddress        *net.IPNet
+	BranchGatewayIPAddress net.IP
+	InterfaceType          string
+	UserName               string
+}
+
+// netConfigJSON defines the network configuration JSON file format for the vpc-branch-eni plugin.
+type netConfigJSON struct {
+	cniTypes.NetConf
+	TrunkName              string `json:"trunkName"`
+	TrunkMACAddress        string `json:"trunkMACAddress"`
+	BranchVlanID           string `json:"branchVlanID"`
+	BranchMACAddress       string `json:"branchMACAddress"`
+	BranchIPAddress        string `json:"branchIPAddress"`
+	BranchGatewayIPAddress string `json:"branchGatewayIPAddress"`
+	InterfaceType          string `json:"interfaceType"`
+	UserName               string `json:"userName"`
 }
 
 // pcArgs defines the per-container arguments passed in CNI_ARGS environment variable.
@@ -56,7 +73,7 @@ const (
 // New creates a new NetConfig object by parsing the given CNI arguments.
 func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	// Parse network configuration.
-	var config NetConfig
+	var config netConfigJSON
 	err := json.Unmarshal(args.StdinData, &config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse network config: %v", err)
@@ -99,28 +116,51 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		config.InterfaceType = IfTypeTAP
 	}
 
+	// Populate NetConfig.
+	netConfig := NetConfig{
+		NetConf:       config.NetConf,
+		TrunkName:     config.TrunkName,
+		InterfaceType: config.InterfaceType,
+		UserName:      config.UserName,
+	}
+
 	// Parse the trunk MAC address.
 	if config.TrunkMACAddress != "" {
-		_, err = net.ParseMAC(config.TrunkMACAddress)
+		netConfig.TrunkMACAddress, err = net.ParseMAC(config.TrunkMACAddress)
 		if err != nil {
 			return nil, fmt.Errorf("invalid trunkMACAddress %s", config.TrunkMACAddress)
 		}
 	}
 
+	// Parse the branch VLAN ID.
+	netConfig.BranchVlanID, err = strconv.Atoi(config.BranchVlanID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid branchVlanID %s", config.BranchVlanID)
+	}
+
 	// Parse the branch MAC address.
-	_, err = net.ParseMAC(config.BranchMACAddress)
+	netConfig.BranchMACAddress, err = net.ParseMAC(config.BranchMACAddress)
 	if err != nil {
 		return nil, fmt.Errorf("invalid branchMACAddress %s", config.BranchMACAddress)
 	}
 
-	// Validate if the optional IP address is valid.
+	// Parse the optional branch IP address.
 	if config.BranchIPAddress != "" {
-		if _, _, err := net.ParseCIDR(config.BranchIPAddress); err != nil {
+		netConfig.BranchIPAddress, err = vpc.GetIPAddressFromString(config.BranchIPAddress)
+		if err != nil {
 			return nil, fmt.Errorf("invalid branchIPAddress %s", config.BranchIPAddress)
 		}
 	}
 
-	// Validation complete. Return the parsed config object.
-	log.Debugf("Created NetConfig: %+v", config)
-	return &config, nil
+	// Parse the optional gateway IP address.
+	if config.BranchGatewayIPAddress != "" {
+		netConfig.BranchGatewayIPAddress = net.ParseIP(config.BranchGatewayIPAddress)
+		if netConfig.BranchGatewayIPAddress == nil {
+			return nil, fmt.Errorf("invalid branchGatewayIPAddress %s", config.BranchGatewayIPAddress)
+		}
+	}
+
+	// Validation complete. Return the parsed NetConfig object.
+	log.Debugf("Created NetConfig: %+v", netConfig)
+	return &netConfig, nil
 }

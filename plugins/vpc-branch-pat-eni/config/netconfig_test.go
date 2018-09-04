@@ -41,8 +41,8 @@ func TestValidConfig(t *testing.T) {
 	netConfig, err := New(args, false)
 	assert.NoError(t, err)
 	assert.Equal(t, "eth0", netConfig.TrunkName)
-	assert.Equal(t, "101", netConfig.BranchVlanID)
-	assert.Equal(t, "01:23:45:67:89:ab", netConfig.BranchMACAddress)
-	assert.Equal(t, "10.0.1.42/24", netConfig.BranchIPAddress)
+	assert.Equal(t, 101, netConfig.BranchVlanID)
+	assert.Equal(t, "01:23:45:67:89:ab", netConfig.BranchMACAddress.String())
+	assert.Equal(t, "10.0.1.42/24", netConfig.BranchIPAddress.String())
 	assert.True(t, netConfig.CleanupPATNetNS)
 }

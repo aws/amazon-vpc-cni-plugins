@@ -30,7 +30,7 @@ type config struct {
 var (
 	validConfigs = []config{
 		config{
-			netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14"}`,
+			netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/16", "branchGatewayIPAddress":"10.11.0.1"}`,
 			pcArgs:    "",
 		},
 		config{
@@ -46,7 +46,7 @@ var (
 	invalidConfigs = []config{
 		config{
 			netConfig: `{"trunkName":"eth1"}`,
-			pcArgs:    "BranchVlanID=123;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1/16",
+			pcArgs:    "BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1/16",
 		},
 		config{
 			netConfig: `{"trunkName":"eth1"}`,
@@ -93,7 +93,8 @@ func TestPerContainerArgsOverrideNetConfig(t *testing.T) {
 	}
 	nc, err := New(args)
 	assert.NoError(t, err)
-	assert.Equal(t, "42", nc.BranchVlanID, "invalid vlanid")
-	assert.Equal(t, "44:44:44:55:55:55", nc.BranchMACAddress, "invalid macaddress")
-	assert.Equal(t, "192.168.1.2/16", nc.BranchIPAddress, "invalid ipaddress")
+
+	assert.Equal(t, 42, nc.BranchVlanID, "invalid vlanid")
+	assert.Equal(t, "44:44:44:55:55:55", nc.BranchMACAddress.String(), "invalid macaddress")
+	assert.Equal(t, "192.168.1.2/16", nc.BranchIPAddress.String(), "invalid ipaddress")
 }

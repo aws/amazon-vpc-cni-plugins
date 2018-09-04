@@ -17,15 +17,30 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
+
+	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
 	log "github.com/cihub/seelog"
-	"github.com/containernetworking/cni/pkg/skel"
-	"github.com/containernetworking/cni/pkg/types"
+	cniSkel "github.com/containernetworking/cni/pkg/skel"
+	cniTypes "github.com/containernetworking/cni/pkg/types"
 )
 
 // NetConfig defines the network configuration for the vpc-branch-pat-eni plugin.
 type NetConfig struct {
-	types.NetConf
+	cniTypes.NetConf
+	TrunkName        string
+	TrunkMACAddress  net.HardwareAddr
+	BranchVlanID     int
+	BranchMACAddress net.HardwareAddr
+	BranchIPAddress  net.IPNet
+	UserName         string
+	CleanupPATNetNS  bool
+}
+
+// netConfigJSON defines the network configuration JSON file format for the vpc-branch-pat-eni plugin.
+type netConfigJSON struct {
+	cniTypes.NetConf
 	TrunkName        string `json:"trunkName"`
 	TrunkMACAddress  string `json:"trunkMACAddress"`
 	BranchVlanID     string `json:"branchVlanID"`
@@ -36,8 +51,8 @@ type NetConfig struct {
 }
 
 // New creates a new NetConfig object by parsing the given CNI arguments.
-func New(args *skel.CmdArgs, isAdd bool) (*NetConfig, error) {
-	var config NetConfig
+func New(args *cniSkel.CmdArgs, isAdd bool) (*NetConfig, error) {
+	var config netConfigJSON
 	err := json.Unmarshal(args.StdinData, &config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse network config: %v", err)
@@ -54,39 +69,46 @@ func New(args *skel.CmdArgs, isAdd bool) (*NetConfig, error) {
 		return nil, fmt.Errorf("missing required parameter branchMACAddress")
 	}
 
+	// Populate NetConfig.
+	netConfig := NetConfig{
+		NetConf:         config.NetConf,
+		TrunkName:       config.TrunkName,
+		UserName:        config.UserName,
+		CleanupPATNetNS: config.CleanupPATNetNS,
+	}
+
 	// Parse the trunk MAC address.
 	if config.TrunkMACAddress != "" {
-		_, err = net.ParseMAC(config.TrunkMACAddress)
+		netConfig.TrunkMACAddress, err = net.ParseMAC(config.TrunkMACAddress)
 		if err != nil {
 			return nil, fmt.Errorf("invalid trunkMACAddress %s", config.TrunkMACAddress)
 		}
 	}
 
-	// Parse the branch MAC address.
+	// Parse the branch VLAN ID.
+	netConfig.BranchVlanID, err = strconv.Atoi(config.BranchVlanID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid branchVlanID %s", config.BranchVlanID)
+	}
+
+	// Parse the optional branch MAC address.
 	if config.BranchMACAddress != "" {
-		_, err = net.ParseMAC(config.BranchMACAddress)
+		netConfig.BranchMACAddress, err = net.ParseMAC(config.BranchMACAddress)
 		if err != nil {
 			return nil, fmt.Errorf("invalid branchMACAddress %s", config.BranchMACAddress)
 		}
 	}
 
-	// Validate if the IPv4 address is valid.
+	// Parse the optional branch IP address.
 	if config.BranchIPAddress != "" {
-		if _, _, err := net.ParseCIDR(config.BranchIPAddress); err != nil {
+		ipAddr, err := vpc.GetIPAddressFromString(config.BranchIPAddress)
+		netConfig.BranchIPAddress = *ipAddr
+		if err != nil {
 			return nil, fmt.Errorf("invalid branchIPAddress %s", config.BranchIPAddress)
 		}
 	}
 
-	// Validation complete. Return the parsed config object.
+	// Validation complete. Return the parsed NetConfig object.
 	log.Debugf("Created NetConfig: %+v", config)
-	return &config, nil
-}
-
-// isValidIPv4Address returns whether the given string is a valid IPv4 address.
-func isValidIPV4Address(address string) bool {
-	ip := net.ParseIP(address)
-	if ip == nil || ip.To4() == nil {
-		return false
-	}
-	return true
+	return &netConfig, nil
 }

@@ -16,7 +16,6 @@ package plugin
 import (
 	"fmt"
 	"net"
-	"strconv"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/aws/amazon-vpc-cni-plugins/network/iptables"
@@ -34,11 +33,11 @@ import (
 
 const (
 	// Name templates used for objects created by this plugin.
-	patNetNSNameFormat   = "vpc-pat-%s"
-	branchLinkNameFormat = "%s.%s"
-	vethLinkNameFormat   = "veth%s-%s"
+	patNetNSNameFormat   = "vpc-pat-%d"
+	branchLinkNameFormat = "%s.%d"
+	vethLinkNameFormat   = "veth%d-%s"
 	bridgeName           = "virbr0"
-	tapBridgeNameFormat  = "tapbr%s"
+	tapBridgeNameFormat  = "tapbr%d"
 
 	// Static IP address assigned to the PAT bridge.
 	bridgeIPAddressString = "192.168.122.1/24"
@@ -56,17 +55,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	log.Infof("Executing ADD with netconfig: %+v.", netConfig)
 
 	// Derive names from CNI network config.
-	// All fields have already been validated during parsing.
 	patNetNSName := fmt.Sprintf(patNetNSNameFormat, netConfig.BranchVlanID)
-	bridgeIPAddress, _ := vpc.GetIPAddressFromString(bridgeIPAddressString)
-	trunkMACAddress, _ := net.ParseMAC(netConfig.TrunkMACAddress)
-	branchMACAddress, _ := net.ParseMAC(netConfig.BranchMACAddress)
-	branchVlanID, _ := strconv.Atoi(netConfig.BranchVlanID)
-
-	// Compute the branch ENI's VPC subnet.
-	branchSubnet, _ := vpc.NewSubnetFromString(netConfig.BranchIPAddress)
-	branchIPAddress, _ := vpc.GetIPAddressFromString(netConfig.BranchIPAddress)
-
 	vethLinkName := fmt.Sprintf(vethLinkNameFormat, netConfig.BranchVlanID, args.ContainerID)
 	vethPeerName := vethLinkName + "-2"
 	tapBridgeName := fmt.Sprintf(tapBridgeNameFormat, netConfig.BranchVlanID)
@@ -90,7 +79,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	log.Infof("Lookup for username %s returned uid %d.", netConfig.UserName, uid)
 
 	// Create the trunk ENI.
-	trunk, err := eni.NewTrunk(netConfig.TrunkName, trunkMACAddress, eni.TrunkIsolationModeVLAN)
+	trunk, err := eni.NewTrunk(netConfig.TrunkName, netConfig.TrunkMACAddress, eni.TrunkIsolationModeVLAN)
 	if err != nil {
 		log.Errorf("Failed to find trunk interface %s: %v.", netConfig.TrunkName, err)
 		return err
@@ -104,10 +93,20 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		// Create the PAT network namespace.
 		branchName := fmt.Sprintf(branchLinkNameFormat, trunk.GetLinkName(), netConfig.BranchVlanID)
 
+		// Compute the branch ENI's VPC subnet.
+		branchSubnetPrefix := vpc.GetSubnetPrefix(&netConfig.BranchIPAddress)
+		branchSubnet, _ := vpc.NewSubnet(branchSubnetPrefix)
+		bridgeIPAddress, _ := vpc.GetIPAddressFromString(bridgeIPAddressString)
+
 		patNetNS, err = plugin.createPATNetworkNamespace(
 			patNetNSName, trunk,
-			branchName, branchMACAddress, branchVlanID,
-			branchIPAddress, branchSubnet, bridgeIPAddress)
+			branchName, netConfig.BranchMACAddress, netConfig.BranchVlanID,
+			&netConfig.BranchIPAddress, branchSubnet, bridgeIPAddress)
+
+		if err != nil {
+			log.Errorf("Failed to setup PAT netns %s: %v.", patNetNSName, err)
+			return err
+		}
 	} else {
 		// Reuse the PAT network namespace that was setup on this VLAN ID during a previous request.
 		log.Infof("Found PAT netns %s.", patNetNSName)
@@ -139,7 +138,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		Interfaces: []*cniCurrent.Interface{
 			{
 				Name:    tapLinkName,
-				Mac:     branchMACAddress.String(),
+				Mac:     netConfig.BranchMACAddress.String(),
 				Sandbox: targetNetNSName,
 			},
 		},

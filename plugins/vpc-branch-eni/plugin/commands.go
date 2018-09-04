@@ -16,7 +16,6 @@ package plugin
 import (
 	"fmt"
 	"net"
-	"strconv"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
@@ -33,15 +32,8 @@ import (
 
 const (
 	// Name templates used for objects created by this plugin.
-	// TODO
-	// For the caller to query/perform any subsequent configurations
-	// on the devices created by this plugin, we need to
-	// [i] Either make these configurable by accepting these names
-	// in the CNI config
-	// [ii] Or, print the names of created interfaces in the result
-	// so that the caller can use these names
-	branchLinkNameFormat = "%s.%s"
-	bridgeNameFormat     = "tapbr%s"
+	branchLinkNameFormat = "%s.%d"
+	bridgeNameFormat     = "tapbr%d"
 )
 
 // Add is the internal implementation of CNI ADD command.
@@ -55,25 +47,16 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	log.Infof("Executing ADD with netconfig: %+v.", netConfig)
 
-	// Derive names from CNI network config.
-	// All fields have already been validated during parsing.
-	trunkMACAddress, _ := net.ParseMAC(netConfig.TrunkMACAddress)
-	branchMACAddress, _ := net.ParseMAC(netConfig.BranchMACAddress)
-	branchVlanID, _ := strconv.Atoi(netConfig.BranchVlanID)
-	bridgeName := fmt.Sprintf(bridgeNameFormat, netConfig.BranchVlanID)
-	ifName := args.IfName
-	netnsName := args.Netns
-	var uid int
-
 	// Find the network namespace.
-	log.Infof("Searching for netns %s.", netnsName)
-	ns, err := netns.GetNetNS(netnsName)
+	log.Infof("Searching for netns %s.", args.Netns)
+	ns, err := netns.GetNetNS(args.Netns)
 	if err != nil {
-		log.Errorf("Failed to find netns %s: %v.", netnsName, err)
+		log.Errorf("Failed to find netns %s: %v.", args.Netns, err)
 		return err
 	}
 
 	// Lookup the user ID for TAP link ownership.
+	var uid int
 	if netConfig.InterfaceType == config.IfTypeTAP {
 		uid, err = plugin.CNIPlugin.LookupUser(netConfig.UserName)
 		if err != nil {
@@ -84,7 +67,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	}
 
 	// Create the trunk ENI.
-	trunk, err := eni.NewTrunk(netConfig.TrunkName, trunkMACAddress, eni.TrunkIsolationModeVLAN)
+	trunk, err := eni.NewTrunk(netConfig.TrunkName, netConfig.TrunkMACAddress, eni.TrunkIsolationModeVLAN)
 	if err != nil {
 		log.Errorf("Failed to find trunk interface %s: %v.", netConfig.TrunkName, err)
 		return err
@@ -92,7 +75,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	// Create the branch ENI.
 	branchName := fmt.Sprintf(branchLinkNameFormat, trunk.GetLinkName(), netConfig.BranchVlanID)
-	branch, err := eni.NewBranch(trunk, branchName, branchMACAddress, branchVlanID)
+	branch, err := eni.NewBranch(trunk, branchName, netConfig.BranchMACAddress, netConfig.BranchVlanID)
 	if err != nil {
 		log.Errorf("Failed to create branch interface %s: %v.", branchName, err)
 		return err
@@ -108,7 +91,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	}
 
 	// Move branch ENI to the network namespace.
-	log.Infof("Moving branch link %s to netns %s.", branch, netnsName)
+	log.Infof("Moving branch link %s to netns %s.", branch, args.Netns)
 	err = branch.SetNetNS(ns)
 	if err != nil {
 		log.Errorf("Failed to move branch link: %v.", err)
@@ -123,15 +106,16 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		switch netConfig.InterfaceType {
 		case config.IfTypeVLAN:
 			// Container is running in a network namespace on this host.
-			err = plugin.createVLANLink(branch, branchName, ifName, netConfig.BranchIPAddress)
+			err = plugin.createVLANLink(branch, args.IfName, netConfig.BranchIPAddress)
 		case config.IfTypeTAP:
 			// Container is running in a VM.
 			// Connect the branch ENI to a TAP link in the target network namespace.
-			err = plugin.createTAPLink(bridgeName, branchName, ifName, uid)
+			bridgeName := fmt.Sprintf(bridgeNameFormat, netConfig.BranchVlanID)
+			err = plugin.createTAPLink(bridgeName, branchName, args.IfName, uid)
 		case config.IfTypeMACVTAP:
 			// Container is running in a VM.
 			// Connect the branch ENI to a MACVTAP link in the target network namespace.
-			err = plugin.createMACVTAPLink(ifName, branch.GetLinkIndex())
+			err = plugin.createMACVTAPLink(args.IfName, branch.GetLinkIndex())
 		}
 
 		// Set branch link operational state up. VLAN interfaces were already brought up above.
@@ -157,9 +141,9 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	result := &cniCurrent.Result{
 		Interfaces: []*cniCurrent.Interface{
 			{
-				Name:    ifName,
-				Mac:     branchMACAddress.String(),
-				Sandbox: netnsName,
+				Name:    args.IfName,
+				Mac:     netConfig.BranchMACAddress.String(),
+				Sandbox: args.Netns,
 			},
 		},
 	}
@@ -189,11 +173,10 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	} else {
 		// Find the trunk link name if not known.
 		if netConfig.TrunkName == "" {
-			trunkMACAddress, _ := net.ParseMAC(netConfig.TrunkMACAddress)
-			trunk, err := eni.NewTrunk("", trunkMACAddress, eni.TrunkIsolationModeVLAN)
+			trunk, err := eni.NewTrunk("", netConfig.TrunkMACAddress, eni.TrunkIsolationModeVLAN)
 			if err != nil {
 				// Log and ignore the failure.
-				log.Errorf("Failed to find trunk with MAC address %v: %v.", trunkMACAddress, err)
+				log.Errorf("Failed to find trunk with MAC address %v: %v.", netConfig.TrunkMACAddress, err)
 				return nil
 			}
 			netConfig.TrunkName = trunk.GetLinkName()
@@ -202,10 +185,9 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	}
 	tapBridgeName := fmt.Sprintf(bridgeNameFormat, netConfig.BranchVlanID)
 	tapLinkName := args.IfName
-	netnsName := args.Netns
 
 	// Search for the target network namespace.
-	netns, err := netns.GetNetNS(netnsName)
+	netns, err := netns.GetNetNS(args.Netns)
 	if err == nil {
 		// In target network namespace...
 		err = netns.Run(func() error {
@@ -248,20 +230,17 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 		})
 	} else {
 		// Log and ignore the failure. DEL can be called multiple times and thus must be idempotent.
-		log.Errorf("Failed to find netns %s, ignoring: %v.", netnsName, err)
+		log.Errorf("Failed to find netns %s, ignoring: %v.", args.Netns, err)
 	}
 
 	return nil
 }
 
 // createVLANLink creates a VLAN link in the target network namespace.
-func (plugin *Plugin) createVLANLink(branch *eni.Branch, branchName string, ifName string, ipAddress string) error {
-	branchIPAddress, _ := vpc.GetIPAddressFromString(ipAddress)
-	_, subnetPrefix, _ := net.ParseCIDR(ipAddress)
-
+func (plugin *Plugin) createVLANLink(branch *eni.Branch, linkName string, ipAddress *net.IPNet) error {
 	// Rename the branch link to the requested interface name.
-	log.Infof("Renaming branch link %v to %s.", branch, ifName)
-	err := branch.SetName(ifName)
+	log.Infof("Renaming branch link %v to %s.", branch, linkName)
+	err := branch.SetName(linkName)
 	if err != nil {
 		log.Errorf("Failed to rename branch link %v: %v.", branch, err)
 		return err
@@ -276,19 +255,19 @@ func (plugin *Plugin) createVLANLink(branch *eni.Branch, branchName string, ifNa
 	}
 
 	// Set branch IP address and default gateway if specified.
-	if branchIPAddress != nil {
+	if ipAddress != nil {
 		// Assign the IP address.
-		log.Infof("Assigning IP address %v to branch link.", branchIPAddress)
-		err = branch.SetIPAddress(branchIPAddress)
+		log.Infof("Assigning IP address %v to branch link.", ipAddress)
+		err = branch.SetIPAddress(ipAddress)
 		if err != nil {
 			log.Errorf("Failed to assign IP address to branch link %v: %v.", branch, err)
 			return err
 		}
 
 		// Parse VPC subnet.
-		subnet, err := vpc.NewSubnet(subnetPrefix)
+		subnet, err := vpc.NewSubnet(vpc.GetSubnetPrefix(ipAddress))
 		if err != nil {
-			log.Errorf("Failed to parse VPC subnet %s: %v.", subnetPrefix, err)
+			log.Errorf("Failed to parse VPC subnet for %s: %v.", ipAddress, err)
 			return err
 		}
 
