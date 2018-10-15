@@ -16,8 +16,6 @@ package plugin
 import (
 	"github.com/aws/amazon-vpc-cni-plugins/cni"
 
-	log "github.com/cihub/seelog"
-	cniTypes "github.com/containernetworking/cni/pkg/types"
 	cniVersion "github.com/containernetworking/cni/pkg/version"
 )
 
@@ -29,9 +27,14 @@ const (
 	logFilePath = "/var/log/vpc-branch-pat-eni.log"
 )
 
+var (
+	// specVersions is the set of CNI spec versions supported by this plugin.
+	specVersions = cniVersion.PluginSupports("0.3.0", "0.3.1")
+)
+
 // Plugin represents a vpc-branch-pat-eni CNI plugin.
 type Plugin struct {
-	CNIPlugin *cni.Plugin
+	*cni.Plugin
 }
 
 // NewPlugin creates a new Plugin object.
@@ -39,32 +42,10 @@ func NewPlugin() (*Plugin, error) {
 	var err error
 	plugin := &Plugin{}
 
-	plugin.CNIPlugin, err = cni.NewPlugin(pluginName, logFilePath, plugin)
+	plugin.Plugin, err = cni.NewPlugin(pluginName, specVersions, logFilePath, plugin)
 	if err != nil {
 		return nil, err
 	}
 
 	return plugin, nil
-}
-
-// Initialize initializes the plugin.
-func (plugin *Plugin) Initialize() error {
-	return plugin.CNIPlugin.Initialize()
-}
-
-// Uninitialize frees the plugin resources.
-func (plugin *Plugin) Uninitialize() {
-	plugin.CNIPlugin.Uninitialize()
-}
-
-// Run starts the plugin.
-func (plugin *Plugin) Run() *cniTypes.Error {
-	defer log.Flush()
-
-	return plugin.CNIPlugin.Run()
-}
-
-// GetVersion returns the CNI plugin information.
-func (plugin *Plugin) GetVersion() cniVersion.PluginInfo {
-	return GetSpecVersionSupported()
 }

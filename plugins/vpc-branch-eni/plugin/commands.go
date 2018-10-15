@@ -58,7 +58,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	// Lookup the user ID for TAP link ownership.
 	var uid int
 	if netConfig.InterfaceType == config.IfTypeTAP {
-		uid, err = plugin.CNIPlugin.LookupUser(netConfig.UserName)
+		uid, err = plugin.LookupUser(netConfig.UserName)
 		if err != nil {
 			log.Errorf("Failed to lookup user %s: %v.", netConfig.UserName, err)
 			return err

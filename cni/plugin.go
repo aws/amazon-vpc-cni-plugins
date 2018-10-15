@@ -32,17 +32,24 @@ import (
 
 // Plugin is the base class to all CNI plugins.
 type Plugin struct {
-	Name        string
-	LogFilePath string
-	Commands    API
+	Name         string
+	SpecVersions cniVersion.PluginInfo
+	LogFilePath  string
+	Commands     API
 }
 
 // NewPlugin creates a new CNI Plugin object.
-func NewPlugin(name string, logFilePath string, cmds API) (*Plugin, error) {
+func NewPlugin(
+	name string,
+	specVersions cniVersion.PluginInfo,
+	logFilePath string,
+	cmds API) (*Plugin, error) {
+
 	return &Plugin{
-		Name:        name,
-		LogFilePath: logFilePath,
-		Commands:    cmds,
+		Name:         name,
+		SpecVersions: specVersions,
+		LogFilePath:  logFilePath,
+		Commands:     cmds,
 	}, nil
 }
 
@@ -118,9 +125,9 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	return nil
 }
 
-// GetVersion is an empty CNI VERSION command handler to ensure all CNI plugins implement CNIAPI.
+// GetVersion is the default CNI VERSION command handler.
 func (plugin *Plugin) GetVersion() cniVersion.PluginInfo {
-	return nil
+	return plugin.SpecVersions
 }
 
 // printVersionInfo prints the plugin version.
