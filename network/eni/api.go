@@ -25,10 +25,11 @@ type API interface {
 	GetLinkIndex() int
 	GetLinkName() string
 
-	Attach() error
-	Detach() error
+	AttachToLink() error
+	DetachFromLink() error
 
-	SetName(name string) error
+	SetLinkName(name string) error
+	SetLinkMTU(mtu uint) error
 	SetOpState(up bool) error
 	SetNetNS(ns netns.NetNS) error
 	SetMACAddress(address net.HardwareAddr) error

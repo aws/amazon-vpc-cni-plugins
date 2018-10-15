@@ -54,7 +54,7 @@ func NewTrunk(linkName string, macAddress net.HardwareAddr, isolationMode Isolat
 	}
 
 	// Trunk interfaces start attached.
-	err = trunk.Attach()
+	err = trunk.AttachToLink()
 	if err != nil {
 		log.Errorf("Failed to find trunk interface %s: %v", &trunk.ENI, err)
 		return nil, err

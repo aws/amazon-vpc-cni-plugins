@@ -60,8 +60,8 @@ func (eni *ENI) String() string {
 	return fmt.Sprintf("{linkName:%s macAddress:%s}", eni.linkName, eni.macAddress)
 }
 
-// Attach attaches the ENI to a link.
-func (eni *ENI) Attach() error {
+// AttachToLink attaches the ENI to a link.
+func (eni *ENI) AttachToLink() error {
 	var iface *net.Interface
 	var err error
 
@@ -99,14 +99,14 @@ func (eni *ENI) Attach() error {
 	return nil
 }
 
-// Detach detaches the ENI from a link.
-func (eni *ENI) Detach() error {
+// DetachFromLink detaches the ENI from a link.
+func (eni *ENI) DetachFromLink() error {
 	eni.linkIndex = 0
 	return nil
 }
 
-// SetName sets the name of the ENI.
-func (eni *ENI) SetName(name string) error {
+// SetLinkName sets the name of the ENI.
+func (eni *ENI) SetLinkName(name string) error {
 	la := netlink.NewLinkAttrs()
 	la.Name = eni.linkName
 	link := &netlink.Dummy{LinkAttrs: la}
@@ -119,6 +119,14 @@ func (eni *ENI) SetName(name string) error {
 	eni.linkName = name
 
 	return nil
+}
+
+// SetLinkMTU sets the maximum transmission unit of the ENI.
+func (eni *ENI) SetLinkMTU(mtu uint) error {
+	la := netlink.NewLinkAttrs()
+	la.Name = eni.linkName
+	link := &netlink.Dummy{LinkAttrs: la}
+	return netlink.LinkSetMTU(link, int(mtu))
 }
 
 // SetOpState sets the operational state of the ENI.
@@ -143,9 +151,7 @@ func (eni *ENI) SetNetNS(ns netns.NetNS) error {
 	la := netlink.NewLinkAttrs()
 	la.Name = eni.linkName
 	link := &netlink.Dummy{LinkAttrs: la}
-	err := netlink.LinkSetNsFd(link, int(ns.GetFd()))
-
-	return err
+	return netlink.LinkSetNsFd(link, int(ns.GetFd()))
 }
 
 // SetMACAddress sets the MAC address of the ENI.

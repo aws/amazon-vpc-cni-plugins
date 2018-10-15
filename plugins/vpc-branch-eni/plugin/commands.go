@@ -240,7 +240,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 func (plugin *Plugin) createVLANLink(branch *eni.Branch, linkName string, ipAddress *net.IPNet) error {
 	// Rename the branch link to the requested interface name.
 	log.Infof("Renaming branch link %v to %s.", branch, linkName)
-	err := branch.SetName(linkName)
+	err := branch.SetLinkName(linkName)
 	if err != nil {
 		log.Errorf("Failed to rename branch link %v: %v.", branch, err)
 		return err
