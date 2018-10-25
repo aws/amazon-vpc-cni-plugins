@@ -2,6 +2,33 @@
 
 
 [[projects]]
+  name = "github.com/Microsoft/go-winio"
+  packages = ["."]
+  revision = "97e4973ce50b2ff5f09635a57e2b88a037aae829"
+  version = "v0.4.11"
+
+[[projects]]
+  name = "github.com/Microsoft/hcsshim"
+  packages = [
+    ".",
+    "internal/guestrequest",
+    "internal/guid",
+    "internal/hcs",
+    "internal/hcserror",
+    "internal/hns",
+    "internal/interop",
+    "internal/longpath",
+    "internal/mergemaps",
+    "internal/safefile",
+    "internal/schema1",
+    "internal/schema2",
+    "internal/timeout",
+    "internal/wclayer"
+  ]
+  revision = "5b3eff572681588b6ce3df295d3d23b72f053f32"
+  version = "v0.7.12"
+
+[[projects]]
   name = "github.com/cihub/seelog"
   packages = ["."]
   revision = "d2c6e5aa9fbfdd1c624e140287063c7730654115"
@@ -26,10 +53,22 @@
   version = "v1.1.1"
 
 [[projects]]
+  name = "github.com/konsorten/go-windows-terminal-sequences"
+  packages = ["."]
+  revision = "5c8c8bd35d3832f5d134ae1e1e375b69a4d25242"
+  version = "v1.0.1"
+
+[[projects]]
   name = "github.com/pmezard/go-difflib"
   packages = ["difflib"]
   revision = "792786c7400a136282c1664665ae0a8db921c6c2"
   version = "v1.0.0"
+
+[[projects]]
+  name = "github.com/sirupsen/logrus"
+  packages = ["."]
+  revision = "ad15b42461921f1fb3529b058c6786c6a45d5162"
+  version = "v1.1.1"
 
 [[projects]]
   name = "github.com/stretchr/testify"
@@ -54,13 +93,22 @@
 
 [[projects]]
   branch = "master"
+  name = "golang.org/x/crypto"
+  packages = ["ssh/terminal"]
+  revision = "0c41d7ab0a0ee717d4590a44bcb987dfd9e183eb"
+
+[[projects]]
+  branch = "master"
   name = "golang.org/x/sys"
-  packages = ["unix"]
+  packages = [
+    "unix",
+    "windows"
+  ]
   revision = "4910a1d54f876d7b22162a85f4d066d3ee649450"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "0c8b55350d9741d4ed9f674902c84feedafd0bf86383a040a6db0c761a8c1648"
+  inputs-digest = "0bd4da05b0791c9273edd7ba322eaa7237c2a2b7dc2b561184d5e3acfa378e9b"
   solver-name = "gps-cdcl"
   solver-version = 1
