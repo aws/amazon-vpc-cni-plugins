@@ -17,14 +17,12 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
 	log "github.com/cihub/seelog"
-	"github.com/vishvananda/netlink"
 )
 
-// ENI represents a VPC elastic network interface.
+// ENI represents a VPC Elastic Network Interface.
 type ENI struct {
 	linkIndex  int
 	linkName   string
@@ -102,85 +100,5 @@ func (eni *ENI) AttachToLink() error {
 // DetachFromLink detaches the ENI from a link.
 func (eni *ENI) DetachFromLink() error {
 	eni.linkIndex = 0
-	return nil
-}
-
-// SetLinkName sets the name of the ENI.
-func (eni *ENI) SetLinkName(name string) error {
-	la := netlink.NewLinkAttrs()
-	la.Name = eni.linkName
-	link := &netlink.Dummy{LinkAttrs: la}
-	err := netlink.LinkSetName(link, name)
-
-	if err != nil {
-		return err
-	}
-
-	eni.linkName = name
-
-	return nil
-}
-
-// SetLinkMTU sets the maximum transmission unit of the ENI.
-func (eni *ENI) SetLinkMTU(mtu uint) error {
-	la := netlink.NewLinkAttrs()
-	la.Name = eni.linkName
-	link := &netlink.Dummy{LinkAttrs: la}
-	return netlink.LinkSetMTU(link, int(mtu))
-}
-
-// SetOpState sets the operational state of the ENI.
-func (eni *ENI) SetOpState(up bool) error {
-	var err error
-
-	la := netlink.NewLinkAttrs()
-	la.Name = eni.linkName
-	link := &netlink.Dummy{LinkAttrs: la}
-
-	if up {
-		err = netlink.LinkSetUp(link)
-	} else {
-		err = netlink.LinkSetDown(link)
-	}
-
-	return err
-}
-
-// SetNetNS sets the network namespace of the ENI.
-func (eni *ENI) SetNetNS(ns netns.NetNS) error {
-	la := netlink.NewLinkAttrs()
-	la.Name = eni.linkName
-	link := &netlink.Dummy{LinkAttrs: la}
-	return netlink.LinkSetNsFd(link, int(ns.GetFd()))
-}
-
-// SetMACAddress sets the MAC address of the ENI.
-func (eni *ENI) SetMACAddress(address net.HardwareAddr) error {
-	la := netlink.NewLinkAttrs()
-	la.Name = eni.linkName
-	link := &netlink.Dummy{LinkAttrs: la}
-
-	err := netlink.LinkSetHardwareAddr(link, address)
-	if err != nil {
-		return err
-	}
-
-	eni.macAddress = address
-
-	return nil
-}
-
-// SetIPAddress assigns the given IP address to the ENI.
-func (eni *ENI) SetIPAddress(address *net.IPNet) error {
-	la := netlink.NewLinkAttrs()
-	la.Index = eni.linkIndex
-	link := &netlink.Dummy{LinkAttrs: la}
-	addr := &netlink.Addr{IPNet: address}
-
-	err := netlink.AddrAdd(link, addr)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
