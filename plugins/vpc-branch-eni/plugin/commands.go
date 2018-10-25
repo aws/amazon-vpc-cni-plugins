@@ -25,7 +25,7 @@ import (
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
 	cniTypes "github.com/containernetworking/cni/pkg/types"
-	cniCurrent "github.com/containernetworking/cni/pkg/types/current"
+	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/current"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
@@ -138,8 +138,8 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	// Generate CNI result.
 	// IP addresses, routes and DNS are configured by VPC DHCP servers.
-	result := &cniCurrent.Result{
-		Interfaces: []*cniCurrent.Interface{
+	result := &cniTypesCurrent.Result{
+		Interfaces: []*cniTypesCurrent.Interface{
 			{
 				Name:    args.IfName,
 				Mac:     netConfig.BranchMACAddress.String(),

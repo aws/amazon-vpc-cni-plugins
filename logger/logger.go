@@ -21,9 +21,11 @@ import (
 )
 
 const (
+	// Environment variables for custom log settings.
 	envLogLevel    = "VPC_CNI_LOG_LEVEL"
 	envLogFilePath = "VPC_CNI_LOG_FILE"
 
+	// Log configuration used by seelog.
 	logConfigFormat = `
 <seelog type="asyncloop" minlevel="%s">
  <outputs formatid="main">
@@ -42,7 +44,7 @@ func Setup(logFilePath string) {
 
 	logger, err := log.LoggerFromConfigAsString(config)
 	if err != nil {
-		fmt.Println("Error setting up logger: ", err)
+		fmt.Println("Failed to setup logger: ", err)
 		return
 	}
 
@@ -51,12 +53,12 @@ func Setup(logFilePath string) {
 
 // GetLogLevel returns the effective log level.
 func getLogLevel() string {
-	seelogLevel, ok := log.LogLevelFromString(os.Getenv(envLogLevel))
+	logLevel, ok := log.LogLevelFromString(os.Getenv(envLogLevel))
 	if !ok {
-		seelogLevel = log.InfoLvl
+		logLevel = log.InfoLvl
 	}
 
-	return seelogLevel.String()
+	return logLevel.String()
 }
 
 // GetLogFilePath returns the effective log file path.

@@ -26,7 +26,7 @@ import (
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
 	cniTypes "github.com/containernetworking/cni/pkg/types"
-	cniCurrent "github.com/containernetworking/cni/pkg/types/current"
+	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/current"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
@@ -134,8 +134,8 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	// Generate CNI result.
 	// IP addresses, routes and DNS are configured by VPC DHCP servers.
-	result := &cniCurrent.Result{
-		Interfaces: []*cniCurrent.Interface{
+	result := &cniTypesCurrent.Result{
+		Interfaces: []*cniTypesCurrent.Interface{
 			{
 				Name:    tapLinkName,
 				Mac:     netConfig.BranchMACAddress.String(),
@@ -575,7 +575,7 @@ func (plugin *Plugin) createTapLink(
 		return err
 	}
 
-	// Set the veth peer link operational state up
+	// Set the veth peer link operational state up.
 	log.Infof("Setting veth peer link %s state up.", vethLinkName)
 	err = netlink.LinkSetUp(vethLink)
 	if err != nil {
@@ -586,7 +586,7 @@ func (plugin *Plugin) createTapLink(
 	return nil
 }
 
-// deleteTapVethInterfaces deletes tap link and veth peer link from the target netns.
+// deleteTapVethLinks deletes tap link and veth peer link from the target netns.
 func (plugin *Plugin) deleteTapVethLinks(
 	targetNetNSName string,
 	tapLinkName string,
