@@ -55,7 +55,7 @@ vpc-eni: $(BUILD_DIR)/vpc-eni
 vpc-shared-eni: $(BUILD_DIR)/vpc-shared-eni
 vpc-branch-eni: $(BUILD_DIR)/vpc-branch-eni
 vpc-branch-pat-eni: $(BUILD_DIR)/vpc-branch-pat-eni
-all-binaries: vpc-eni vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni
+all-binaries: vpc-branch-eni vpc-branch-pat-eni
 build: all-binaries unit-test
 
 # Build the vpc-eni CNI plugin.
