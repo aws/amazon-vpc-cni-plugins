@@ -119,7 +119,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		}
 
 		// Set branch link operational state up. VLAN interfaces were already brought up above.
-		if netConfig.InterfaceType != config.IfTypeVLAN && err != nil {
+		if netConfig.InterfaceType != config.IfTypeVLAN && err == nil {
 			log.Infof("Setting branch link state up.")
 			err = branch.SetOpState(true)
 			if err != nil {
