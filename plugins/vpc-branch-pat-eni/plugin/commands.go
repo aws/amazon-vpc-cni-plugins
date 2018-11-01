@@ -16,6 +16,7 @@ package plugin
 import (
 	"fmt"
 	"net"
+	"syscall"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/aws/amazon-vpc-cni-plugins/network/iptables"
@@ -35,12 +36,20 @@ const (
 	// Name templates used for objects created by this plugin.
 	patNetNSNameFormat   = "vpc-pat-%d"
 	branchLinkNameFormat = "%s.%d"
-	vethLinkNameFormat   = "veth%d-%s"
 	bridgeName           = "virbr0"
 	tapBridgeNameFormat  = "tapbr%d"
 
 	// Static IP address assigned to the PAT bridge.
 	bridgeIPAddressString = "192.168.122.1/24"
+
+	// maxRetriesVethPairNameCollision specifies the maximum number of times
+	// veth pair creation will be retried if there's a name collision.
+	maxRetriesVethPairNameCollision = 3
+
+	// linkDeviceTypeVethPair specifies the link device type string for a
+	// veth pair device. The names for different device types can be found
+	// by running the "ip link help" command.
+	linkDeviceTypeVethPair = "veth"
 )
 
 // Add is the internal implementation of CNI ADD command.
@@ -56,8 +65,6 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	// Derive names from CNI network config.
 	patNetNSName := fmt.Sprintf(patNetNSNameFormat, netConfig.BranchVlanID)
-	vethLinkName := fmt.Sprintf(vethLinkNameFormat, netConfig.BranchVlanID, args.ContainerID)
-	vethPeerName := vethLinkName + "-2"
 	tapBridgeName := fmt.Sprintf(tapBridgeNameFormat, netConfig.BranchVlanID)
 	tapLinkName := args.IfName
 	targetNetNSName := args.Netns
@@ -113,9 +120,13 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	}
 
 	// Create the veth pair in PAT network namespace.
-	log.Infof("Creating veth pair %s.", vethLinkName)
+	var vethPeerName string
 	err = patNetNS.Run(func() error {
-		return plugin.createVethPair(bridgeName, targetNetNS, vethLinkName, vethPeerName)
+		var verr error
+		vethPeerName, verr = plugin.createVethPair(
+			netConfig.BranchVlanID, args.ContainerID, bridgeName, targetNetNS)
+		return verr
+
 	})
 	if err != nil {
 		log.Errorf("Failed to create veth pair: %v.", err)
@@ -164,14 +175,12 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 
 	// Derive names from CNI network config.
 	patNetNSName := fmt.Sprintf(patNetNSNameFormat, netConfig.BranchVlanID)
-	vethLinkName := fmt.Sprintf(vethLinkNameFormat, netConfig.BranchVlanID, args.ContainerID)
-	vethPeerName := vethLinkName + "-2"
 	tapBridgeName := fmt.Sprintf(tapBridgeNameFormat, netConfig.BranchVlanID)
 	tapLinkName := args.IfName
 	targetNetNSName := args.Netns
 
 	// Delete the tap link and veth pair from the target netns.
-	plugin.deleteTapVethLinks(targetNetNSName, tapLinkName, vethPeerName, tapBridgeName)
+	plugin.deleteTapVethLinks(targetNetNSName, tapLinkName, tapBridgeName)
 
 	// Search for the PAT network namespace.
 	patNetNS, err := netns.GetNetNSByName(patNetNSName)
@@ -435,6 +444,36 @@ func (plugin *Plugin) setupIptablesRules(bridgeName, bridgeSubnet, branchLinkNam
 
 // createVethPair creates a veth pair to connect a PAT network namespace to a target network namespace.
 func (plugin *Plugin) createVethPair(
+	branchVlanID int,
+	containerID string,
+	bridgeName string,
+	targetNetNS netns.NetNS) (string, error) {
+	var vethLinkName, vethPeerName string
+	var err error
+	// Attempt to create the veth pair. The create attempt will be retried if a device
+	// with the name already exists, up to 3 times.
+	generateRandomName := false
+	for i := 0; i < maxRetriesVethPairNameCollision; i++ {
+		vethLinkName, vethPeerName = generateVethPairNames(branchVlanID, containerID, generateRandomName)
+		err = plugin.createVethPairOnce(bridgeName, targetNetNS, vethLinkName, vethPeerName)
+		if err == nil {
+			// Successfully created veth pair, return.
+			return vethPeerName, nil
+		}
+		if err != syscall.EEXIST {
+			// Return from the method for any error other than 'device exists'.
+			return "", err
+		}
+		// Possible veth pair name collision. Regenerate veth link and its peer's name.
+		generateRandomName = true
+		log.Warnf("Veth pair %s exists [%v].", vethLinkName, err)
+	}
+
+	return vethPeerName, err
+}
+
+// createVethPairOnce creates a veth pair to connect a PAT network namespace to a target network namespace.
+func (plugin *Plugin) createVethPairOnce(
 	bridgeName string,
 	targetNetNS netns.NetNS,
 	vethLinkName string,
@@ -590,7 +629,6 @@ func (plugin *Plugin) createTapLink(
 func (plugin *Plugin) deleteTapVethLinks(
 	targetNetNSName string,
 	tapLinkName string,
-	vethPeerName string,
 	tapBridgeName string) {
 	// Search for the target network namespace.
 	targetNetNS, err := netns.GetNetNSByName(targetNetNSName)
@@ -612,15 +650,8 @@ func (plugin *Plugin) deleteTapVethLinks(
 			log.Errorf("Failed to delete tap link %s: %v.", tapLinkName, err)
 		}
 
-		// Delete the veth pair.
-		la = netlink.NewLinkAttrs()
-		la.Name = vethPeerName
-		vethLink := &netlink.Veth{LinkAttrs: la}
-		log.Infof("Deleting veth pair: %v.", vethPeerName)
-		err = netlink.LinkDel(vethLink)
-		if err != nil {
-			log.Errorf("Failed to delete veth pair %s: %v.", vethPeerName, err)
-		}
+		// Delete the veth peer.
+		deleteVethPeerByNameRegex(targetNetNSName)
 
 		// Delete the tap bridge.
 		la = netlink.NewLinkAttrs()
@@ -634,4 +665,30 @@ func (plugin *Plugin) deleteTapVethLinks(
 
 		return nil
 	})
+}
+
+// deleteVethPeerByNameRegex deletes a veth peer device in the target namespace
+// if the name matches the regex used to create the veth pair link device.
+func deleteVethPeerByNameRegex(targetNetNSName string) {
+	// Veth pair cannot be deleted by name as a random name could
+	// have been generated for it in Add(). Find it by type instead.
+	linkDevs, err := netlink.LinkList()
+	if err != nil {
+		log.Errorf("Failed to list links in %s: %v.", targetNetNSName, err)
+		return
+	}
+	for _, link := range linkDevs {
+		linkName := link.Attrs().Name
+		if link.Type() == linkDeviceTypeVethPair && vethPeerNameRecognizable(linkName) {
+			log.Infof("Deleting veth link: %v.", linkName)
+			err = netlink.LinkDel(link)
+			if err != nil {
+				log.Errorf("Failed to delete veth pair%s: %v.", linkName, err)
+			}
+			// The veth pair device was found and an attempt was made to delete
+			// the same. Nothing left to do.
+			return
+		}
+	}
+
 }
