@@ -24,6 +24,7 @@ import (
 type API interface {
 	GetLinkIndex() int
 	GetLinkName() string
+	GetMACAddress() net.HardwareAddr
 
 	AttachToLink() error
 	DetachFromLink() error

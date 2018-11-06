@@ -53,6 +53,11 @@ func (eni *ENI) GetLinkName() string {
 	return eni.linkName
 }
 
+// GetMACAddress returns the MAC address of the ENI.
+func (eni *ENI) GetMACAddress() net.HardwareAddr {
+	return eni.macAddress
+}
+
 // String returns a string representation of the ENI.
 func (eni *ENI) String() string {
 	return fmt.Sprintf("{linkName:%s macAddress:%s}", eni.linkName, eni.macAddress)
