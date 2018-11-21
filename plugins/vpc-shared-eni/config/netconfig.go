@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
@@ -31,10 +32,10 @@ type NetConfig struct {
 	ENIName          string
 	ENIMACAddress    net.HardwareAddr
 	ENIIPAddress     *net.IPNet
-	BridgeNetNSName  string
-	BridgeNamePrefix string
+	BridgeNetNSPath  string
 	IPAddress        *net.IPNet
 	GatewayIPAddress net.IP
+	Kubernetes       KubernetesConfig
 }
 
 // netConfigJSON defines the network configuration JSON file format for the vpc-shared-eni plugin.
@@ -43,19 +44,16 @@ type netConfigJSON struct {
 	ENIName          string `json:"eniName"`
 	ENIMACAddress    string `json:"eniMACAddress"`
 	ENIIPAddress     string `json:"eniIPAddress"`
-	BridgeNetNSName  string `json:"bridgeNetNSName"`
-	BridgeNamePrefix string `json:"bridgeNamePrefix"`
-	IPAddress        string `json:"IPAddress"`
+	BridgeNetNSPath  string `json:"bridgeNetNSPath"`
+	IPAddress        string `json:"ipAddress"`
 	GatewayIPAddress string `json:"gatewayIPAddress"`
+	ServiceSubnet    string `json:"serviceSubnet"`
 }
 
 const (
-	// Default name for the Linux bridge. Windows picks the name for its vSwitch.
-	defaultBridgeNamePrefix = "vpcbr"
-
 	// Bridge network namespace defaults to the host network namespace (empty string),
 	// or more precisely, whichever namespace the CNI plugin is running in.
-	defaultBridgeNetNSName = ""
+	defaultBridgeNetNSPath = ""
 )
 
 // New creates a new NetConfig object by parsing the given CNI arguments.
@@ -73,16 +71,18 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	}
 
 	// Set defaults.
-	if config.BridgeNamePrefix == "" {
-		config.BridgeNamePrefix = defaultBridgeNamePrefix
+	if config.BridgeNetNSPath == "" {
+		config.BridgeNetNSPath = defaultBridgeNetNSPath
 	}
 
 	// Populate NetConfig.
 	netConfig := NetConfig{
-		NetConf:          config.NetConf,
-		ENIName:          config.ENIName,
-		BridgeNetNSName:  config.BridgeNetNSName,
-		BridgeNamePrefix: config.BridgeNamePrefix,
+		NetConf:         config.NetConf,
+		ENIName:         config.ENIName,
+		BridgeNetNSPath: config.BridgeNetNSPath,
+		Kubernetes: KubernetesConfig{
+			ServiceSubnet: config.ServiceSubnet,
+		},
 	}
 
 	// Parse the ENI MAC address.
@@ -114,6 +114,14 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		netConfig.GatewayIPAddress = net.ParseIP(config.GatewayIPAddress)
 		if netConfig.GatewayIPAddress == nil {
 			return nil, fmt.Errorf("invalid GatewayIPAddress %s", config.GatewayIPAddress)
+		}
+	}
+
+	// Parse orchestrator-specific configuration.
+	if strings.Contains(args.Args, "K8S") {
+		err = parseKubernetesArgs(&netConfig, args)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse Kubernetes args: %v", err)
 		}
 	}
 

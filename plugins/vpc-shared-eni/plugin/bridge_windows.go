@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
@@ -40,9 +41,9 @@ var (
 	hnsMinVersion = hcsshim.HNSVersion1803
 )
 
-// routePolicy is an HNS route policy.
+// hnsRoutePolicy is an HNS route policy.
 // This definition really needs to be in Microsoft's hcsshim package.
-type routePolicy struct {
+type hnsRoutePolicy struct {
 	hcsshim.Policy
 	DestinationPrefix string `json:"DestinationPrefix,omitempty"`
 	NeedEncap         bool   `json:"NeedEncap,omitempty"`
@@ -60,7 +61,7 @@ func (nb *BridgeBuilder) FindOrCreateNetwork(nw *Network) error {
 	}
 
 	// HNS API does not support creating virtual switches in compartments other than the host's.
-	if nw.BridgeNetNSName != "" {
+	if nw.BridgeNetNSPath != "" {
 		return fmt.Errorf("Bridge must be in host network namespace on Windows")
 	}
 
@@ -138,26 +139,64 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	hnsEndpoint = &hcsshim.HNSEndpoint{
 		Name:               endpointName,
 		VirtualNetworkName: nb.generateHNSNetworkName(nw),
-		DNSSuffix:          "",
-		DNSServerList:      "10.100.0.10",
+		DNSSuffix:          nw.DNSSuffix,
+		DNSServerList:      strings.Join(nw.DNSServers, ","),
 	}
 
-	// Set the IP address.
+	// Set the endpoint IP address.
 	hnsEndpoint.IPAddress = ep.IPAddress.IP
 	pl, _ := ep.IPAddress.Mask.Size()
 	hnsEndpoint.PrefixLength = uint8(pl)
 
-	// Enable SNAT to primary VPC IP address for destinations outside of VPC subnets.
-	err = nb.addEndpointPolicy(hnsEndpoint, hcsshim.OutboundNatPolicy{
-		Policy: hcsshim.Policy{Type: hcsshim.OutboundNat},
-		VIP:    nw.ENIIPAddress.IP.String(),
-		Exceptions: []string{
-			vpc.GetSubnetPrefix(nw.ENIIPAddress).String(),
-		},
-	})
+	// SNAT endpoint traffic to ENI primary IP address
+	// except if the destination is in the same VPC.
+	snatExceptions := []string{vpc.GetSubnetPrefix(nw.ENIIPAddress).String()}
+	if nw.ServiceSubnet != "" {
+		// ...or the destination is a service endpoint.
+		snatExceptions = append(snatExceptions, nw.ServiceSubnet)
+	}
+
+	err = nb.addEndpointPolicy(
+		hnsEndpoint,
+		hcsshim.OutboundNatPolicy{
+			Policy: hcsshim.Policy{Type: hcsshim.OutboundNat},
+			// Implicit VIP: nw.ENIIPAddress.IP.String(),
+			Exceptions: snatExceptions,
+		})
 	if err != nil {
-		log.Errorf("Failed to add SNAT policy to HNS endpoint: %v.", err)
+		log.Errorf("Failed to add endpoint SNAT policy: %v.", err)
 		return err
+	}
+
+	// Route traffic sent to service endpoints to the host. The load balancer running
+	// in the host network namespace then forwards traffic to its final destination.
+	if nw.ServiceSubnet != "" {
+		// Set route policy for service subnet.
+		// NextHop is implicitly the host.
+		err = nb.addEndpointPolicy(
+			hnsEndpoint,
+			hnsRoutePolicy{
+				Policy:            hcsshim.Policy{Type: hcsshim.Route},
+				DestinationPrefix: nw.ServiceSubnet,
+				NeedEncap:         true,
+			})
+		if err != nil {
+			log.Errorf("Failed to add endpoint route policy for service subnet: %v.", err)
+			return err
+		}
+
+		// Set route policy for host primary IP address.
+		err = nb.addEndpointPolicy(
+			hnsEndpoint,
+			hnsRoutePolicy{
+				Policy:            hcsshim.Policy{Type: hcsshim.Route},
+				DestinationPrefix: nw.ENIIPAddress.IP.String() + "/32",
+				NeedEncap:         true,
+			})
+		if err != nil {
+			log.Errorf("Failed to add endpoint route policy for host: %v.", err)
+			return err
+		}
 	}
 
 	// Encode the endpoint request.

@@ -30,11 +30,14 @@ type NetworkBuilder interface {
 // Network represents a container network.
 type Network struct {
 	Name             string
-	BridgeNetNSName  string
+	BridgeNetNSPath  string
 	BridgeIndex      int
 	SharedENI        *eni.ENI
 	ENIIPAddress     *net.IPNet
 	GatewayIPAddress net.IP
+	DNSServers       []string
+	DNSSuffix        string
+	ServiceSubnet    string
 }
 
 // Endpoint represents a container network interface.

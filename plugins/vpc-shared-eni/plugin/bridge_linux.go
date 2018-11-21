@@ -44,18 +44,18 @@ func (nb *BridgeBuilder) FindOrCreateNetwork(nw *Network) error {
 	bridgeName := fmt.Sprintf(bridgeNameFormat, nw.Name, nw.SharedENI.GetLinkIndex())
 
 	// Find the bridge network namespace. If none is specified, use the host network namespace.
-	if nw.BridgeNetNSName != "" {
+	if nw.BridgeNetNSPath != "" {
 		var bridgeNetNS netns.NetNS
 
-		log.Infof("Searching for bridge netns %s.", nw.BridgeNetNSName)
-		bridgeNetNS, err = netns.GetNetNSByName(nw.BridgeNetNSName)
+		log.Infof("Searching for bridge netns %s.", nw.BridgeNetNSPath)
+		bridgeNetNS, err = netns.GetNetNSByName(nw.BridgeNetNSPath)
 		if err != nil {
-			log.Errorf("Failed to find bridge netns %s: %v.", nw.BridgeNetNSName, err)
+			log.Errorf("Failed to find bridge netns %s: %v.", nw.BridgeNetNSPath, err)
 			return err
 		}
 
 		// Move the ENI link to the bridge network namespace.
-		log.Infof("Moving link %s to netns %s.", nw.SharedENI, nw.BridgeNetNSName)
+		log.Infof("Moving link %s to netns %s.", nw.SharedENI, nw.BridgeNetNSPath)
 		err = nw.SharedENI.SetNetNS(bridgeNetNS)
 		if err != nil {
 			log.Errorf("Failed to move link: %v.", err)
