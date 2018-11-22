@@ -104,8 +104,9 @@ func (plugin *Plugin) Run() *cniTypes.Error {
 		}
 	}()
 
+	log.Infof("Plugin %s version %s executing CNI command.", plugin.Name, version.Version)
+
 	// Execute CNI command handlers.
-	log.Info("Executing CNI command.")
 	cniErr := cniSkel.PluginMainWithError(
 		plugin.Commands.Add, plugin.Commands.Del, plugin.Commands.GetVersion())
 	if cniErr != nil {

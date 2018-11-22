@@ -20,10 +20,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestVersionStringWhenDirtyIsTrue(t *testing.T) {
+func TestVersionString(t *testing.T) {
 	Version = "0.1.0"
-	GitPorcelain = "1"
 	GitShortHash = "abcd"
+	BuildTime = "2048-08-16T12:10:14-08:00"
 
 	versionInfoJSON, err := String()
 	assert.NoError(t, err)
@@ -33,27 +33,8 @@ func TestVersionStringWhenDirtyIsTrue(t *testing.T) {
 
 	expectedVersionInfo := versionInfo{
 		Version:      Version,
-		Dirty:        true,
 		GitShortHash: GitShortHash,
-	}
-	assert.Equal(t, retVersionInfo, expectedVersionInfo)
-}
-
-func TestVersionStringWhenDirtyIsFalse(t *testing.T) {
-	Version = "0.1.0"
-	GitPorcelain = "0"
-	GitShortHash = "abcd"
-
-	versionInfoJSON, err := String()
-	assert.NoError(t, err)
-
-	var retVersionInfo versionInfo
-	json.Unmarshal([]byte(versionInfoJSON), &retVersionInfo)
-
-	expectedVersionInfo := versionInfo{
-		Version:      Version,
-		Dirty:        false,
-		GitShortHash: GitShortHash,
+		Built:        BuildTime,
 	}
 	assert.Equal(t, retVersionInfo, expectedVersionInfo)
 }

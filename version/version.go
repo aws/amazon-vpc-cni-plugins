@@ -16,7 +16,6 @@ package version
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // Command is the option for plugin to print the version.
@@ -25,30 +24,24 @@ const Command = "version"
 // Version is the version number of the repository.
 var Version string
 
-// GitPorcelain indicates the output of the git status --porcelain command to
-// determine the cleanliness of the git repo when this plugin was built.
-var GitPorcelain string
-
-// GitShortHash is the short hash of this repository build.
+// GitShortHash is the short hash of the Git HEAD.
 var GitShortHash string
+
+// BuildTime is the build time stamp.
+var BuildTime string
 
 type versionInfo struct {
 	Version      string `json:"version"`
-	Dirty        bool   `json:"dirty"`
 	GitShortHash string `json:"gitShortHash"`
+	Built        string `json:"built"`
 }
 
 // String returns a JSON version string from the versionInfo type.
 func String() (string, error) {
-	dirty := true
-	if strings.TrimSpace(GitPorcelain) == "0" {
-		dirty = false
-	}
-
 	verInfo := versionInfo{
 		Version:      Version,
-		Dirty:        dirty,
 		GitShortHash: GitShortHash,
+		Built:        BuildTime,
 	}
 
 	verInfoJSON, err := json.Marshal(verInfo)

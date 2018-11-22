@@ -24,30 +24,27 @@ CREATE_BUILD_ROOT_DIR := $(shell mkdir -p $(BUILD_DIR))
 # Git repo version.
 GIT_TAG ?= $(shell git describe --tags --always --dirty)
 GIT_SHORT_HASH ?= $(shell git rev-parse --short HEAD 2> /dev/null)
-GIT_PORCELAIN ?= $(shell git status --porcelain 2> /dev/null | wc -l)
-BUILD_VERSION ?= $(shell echo $(GIT_TAG) | sed 's/^v\([0-9]\)/\1/')
-BUILD_RELEASE_FLAGS = "-a"
-LINKER_FLAGS = "\
-		-X github.com/aws/amazon-vpc-cni-plugins/version.GitShortHash=$(GIT_SHORT_HASH) \
-		-X github.com/aws/amazon-vpc-cni-plugins/version.GitPorcelain=$(GIT_PORCELAIN) \
-		-X github.com/aws/amazon-vpc-cni-plugins/version.Version=$(BUILD_VERSION) \
-		-s"
-
-# If we can't inspect the repo state, fall back to safe static strings.
 ifeq ($(strip $(GIT_SHORT_HASH)),)
 	GIT_SHORT_HASH=unknown
 endif
-ifeq ($(strip $(GIT_PORCELAIN)),)
-	# This indicates that the repo is dirty.
-	GIT_PORCELAIN=1
-endif
+
+# Build version.
+BUILD_VERSION ?= $(shell echo $(GIT_TAG) | sed 's/^v\([0-9]\)/\1/')
+BUILD_TIMESTAMP = $(shell date --iso-8601=seconds)
+BUILD_RELEASE_FLAGS = "-a"
+LINKER_FLAGS = "\
+		-X github.com/aws/amazon-vpc-cni-plugins/version.Version=$(BUILD_VERSION) \
+		-X github.com/aws/amazon-vpc-cni-plugins/version.GitShortHash=$(GIT_SHORT_HASH) \
+		-X github.com/aws/amazon-vpc-cni-plugins/version.BuildTime=$(BUILD_TIMESTAMP) \
+		-s"
+
 
 # Source files.
-COMMON_SOURCE_FILES = $(shell find . -name '*.go')
-VPC_ENI_PLUGIN_SOURCE_FILES = $(wildcard plugins/vpc-eni/*.go)
-VPC_SHARED_ENI_PLUGIN_SOURCE_FILES = $(wildcard plugins/vpc-eni/*.go)
-VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES = $(wildcard plugins/vpc-eni/*.go)
-VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES = $(wildcard plugins/vpc-branch-pat-eni/*.go)
+COMMON_SOURCE_FILES = $(wildcard cni/*.go, logger/*.go, network/*.go, version/*.go)
+VPC_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-eni -type f)
+VPC_SHARED_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-shared-eni -type f)
+VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-eni -type f)
+VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-pat-eni -type f)
 ALL_SOURCE_FILES := $(shell find . -name '*.go')
 
 # Shorthand build targets.
@@ -55,7 +52,7 @@ vpc-eni: $(BUILD_DIR)/vpc-eni
 vpc-shared-eni: $(BUILD_DIR)/vpc-shared-eni
 vpc-branch-eni: $(BUILD_DIR)/vpc-branch-eni
 vpc-branch-pat-eni: $(BUILD_DIR)/vpc-branch-pat-eni
-all-binaries: vpc-branch-eni vpc-branch-pat-eni
+all-binaries: vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni
 build: all-binaries unit-test
 
 # Build the vpc-eni CNI plugin.
