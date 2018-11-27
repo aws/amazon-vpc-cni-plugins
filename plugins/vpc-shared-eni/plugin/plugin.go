@@ -15,6 +15,7 @@ package plugin
 
 import (
 	"github.com/aws/amazon-vpc-cni-plugins/cni"
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/network"
 
 	cniVersion "github.com/containernetworking/cni/pkg/version"
 )
@@ -35,7 +36,7 @@ var (
 // Plugin represents a vpc-shared-eni CNI plugin.
 type Plugin struct {
 	*cni.Plugin
-	nb NetworkBuilder
+	nb network.Builder
 }
 
 // NewPlugin creates a new Plugin object.
@@ -48,7 +49,7 @@ func NewPlugin() (*Plugin, error) {
 		return nil, err
 	}
 
-	plugin.nb = &BridgeBuilder{}
+	plugin.nb = &network.BridgeBuilder{}
 
 	return plugin, nil
 }

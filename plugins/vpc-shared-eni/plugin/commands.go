@@ -18,6 +18,7 @@ import (
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/config"
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/network"
 
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
@@ -64,7 +65,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	nb := plugin.nb
 
 	// Find or create the container network for the shared ENI.
-	nw := Network{
+	nw := network.Network{
 		Name:             netConfig.Name,
 		BridgeNetNSPath:  netConfig.BridgeNetNSPath,
 		SharedENI:        sharedENI,
@@ -82,7 +83,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	}
 
 	// Find or create the container endpoint on the network.
-	ep := Endpoint{
+	ep := network.Endpoint{
 		ContainerID: args.ContainerID,
 		NetNSName:   args.Netns,
 		IfName:      args.IfName,
@@ -153,13 +154,13 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	// Call operating system specific handler.
 	nb := plugin.nb
 
-	nw := Network{
+	nw := network.Network{
 		Name:            netConfig.Name,
 		BridgeNetNSPath: netConfig.BridgeNetNSPath,
 		SharedENI:       sharedENI,
 	}
 
-	ep := Endpoint{
+	ep := network.Endpoint{
 		ContainerID: args.ContainerID,
 		NetNSName:   args.Netns,
 		IfName:      args.IfName,

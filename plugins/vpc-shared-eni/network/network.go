@@ -11,7 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package plugin
+package network
 
 import (
 	"net"
@@ -19,8 +19,8 @@ import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 )
 
-// NetworkBuilder knows how to build container networks and connect container network interfaces.
-type NetworkBuilder interface {
+// Builder knows how to build container networks and connect container network interfaces.
+type Builder interface {
 	FindOrCreateNetwork(nw *Network) error
 	DeleteNetwork(nw *Network) error
 	FindOrCreateEndpoint(nw *Network, ep *Endpoint) error
