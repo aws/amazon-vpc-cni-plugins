@@ -87,6 +87,8 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		ContainerID: args.ContainerID,
 		NetNSName:   args.Netns,
 		IfName:      args.IfName,
+		IfType:      netConfig.InterfaceType,
+		TapUserID:   netConfig.TapUserID,
 		IPAddress:   netConfig.IPAddress,
 	}
 
@@ -164,6 +166,8 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 		ContainerID: args.ContainerID,
 		NetNSName:   args.Netns,
 		IfName:      args.IfName,
+		IfType:      netConfig.InterfaceType,
+		TapUserID:   netConfig.TapUserID,
 		IPAddress:   netConfig.IPAddress,
 	}
 

@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
@@ -35,6 +36,8 @@ type NetConfig struct {
 	BridgeNetNSPath  string
 	IPAddress        *net.IPNet
 	GatewayIPAddress net.IP
+	InterfaceType    string
+	TapUserID        int
 	Kubernetes       KubernetesConfig
 }
 
@@ -47,6 +50,8 @@ type netConfigJSON struct {
 	BridgeNetNSPath  string `json:"bridgeNetNSPath"`
 	IPAddress        string `json:"ipAddress"`
 	GatewayIPAddress string `json:"gatewayIPAddress"`
+	InterfaceType    string `json:"interfaceType"`
+	TapUserID        string `json:"tapUserID"`
 	ServiceSubnet    string `json:"serviceSubnet"`
 }
 
@@ -54,6 +59,10 @@ const (
 	// Bridge network namespace defaults to the host network namespace (empty string),
 	// or more precisely, whichever namespace the CNI plugin is running in.
 	defaultBridgeNetNSPath = ""
+
+	// Interface type values.
+	IfTypeVETH = "veth"
+	IfTypeTAP  = "tap"
 )
 
 // New creates a new NetConfig object by parsing the given CNI arguments.
@@ -73,6 +82,10 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	// Set defaults.
 	if config.BridgeNetNSPath == "" {
 		config.BridgeNetNSPath = defaultBridgeNetNSPath
+	}
+
+	if config.InterfaceType == "" {
+		config.InterfaceType = IfTypeVETH
 	}
 
 	// Populate NetConfig.
@@ -114,6 +127,14 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		netConfig.GatewayIPAddress = net.ParseIP(config.GatewayIPAddress)
 		if netConfig.GatewayIPAddress == nil {
 			return nil, fmt.Errorf("invalid GatewayIPAddress %s", config.GatewayIPAddress)
+		}
+	}
+
+	// Parse the optional TAP user ID.
+	if config.TapUserID != "" {
+		netConfig.TapUserID, err = strconv.Atoi(config.TapUserID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid TapUserID %s", config.TapUserID)
 		}
 	}
 

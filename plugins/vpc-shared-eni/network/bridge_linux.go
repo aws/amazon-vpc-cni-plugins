@@ -21,9 +21,11 @@ import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/config"
 
 	log "github.com/cihub/seelog"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -32,6 +34,9 @@ const (
 
 	// vethLinkNameFormat is the format used for generating veth link names.
 	vethLinkNameFormat = "veth%s"
+
+	// tapBridgeName is the name of the bridge connecting TAP interfaces.
+	tapBridgeName = "tapbr0"
 )
 
 // BridgeBuilder implements NetworkBuilder interface by bridging containers to an ENI on Linux.
@@ -114,7 +119,8 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 
 	// Setup the target network namespace.
 	err = targetNetNS.Run(func() error {
-		ep.MACAddress, err = nb.setupTargetNetNS(vethPeerName, ep.IfName, ep.IPAddress, nw.GatewayIPAddress)
+		ep.MACAddress, err = nb.setupTargetNetNS(
+			vethPeerName, ep.IfType, ep.TapUserID, ep.IfName, ep.IPAddress, nw.GatewayIPAddress)
 		return err
 	})
 	if err != nil {
@@ -487,6 +493,8 @@ func (nb *BridgeBuilder) deleteVethPair(vethPeerName string) error {
 // Returns the MAC address of the container interface.
 func (nb *BridgeBuilder) setupTargetNetNS(
 	vethPeerName string,
+	ifType string,
+	tapUserID int,
 	ifName string,
 	ipAddress *net.IPNet,
 	gatewayIPAddress net.IP) (net.HardwareAddr, error) {
@@ -498,15 +506,40 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 		return link.Attrs().HardwareAddr, nil
 	}
 
+	switch ifType {
+	case config.IfTypeVETH:
+		err = nb.setupVethLink(vethPeerName, ifName, ipAddress, gatewayIPAddress)
+	case config.IfTypeTAP:
+		err = nb.createTAPLink(vethPeerName, ifName, tapUserID)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Query the container interface MAC address.
+	link, _ = netlink.LinkByName(ifName)
+	return link.Attrs().HardwareAddr, err
+}
+
+// setupVethLink sets up a veth link in the target network namespace.
+func (nb *BridgeBuilder) setupVethLink(
+	vethPeerName string,
+	ifName string,
+	ipAddress *net.IPNet,
+	gatewayIPAddress net.IP) error {
+
+	var link netlink.Link
+
 	// Rename the veth link to the requested interface name.
 	log.Infof("Renaming link %s to %s.", vethPeerName, ifName)
 	la := netlink.NewLinkAttrs()
 	la.Name = vethPeerName
 	link = &netlink.Dummy{LinkAttrs: la}
-	err = netlink.LinkSetName(link, ifName)
+	err := netlink.LinkSetName(link, ifName)
 	if err != nil {
 		log.Errorf("Failed to set veth link %s name: %v.", vethPeerName, err)
-		return nil, err
+		return err
 	}
 
 	// Set the link operational state up.
@@ -516,7 +549,7 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 	err = netlink.LinkSetUp(link)
 	if err != nil {
 		log.Errorf("Failed to set veth link state up: %v.", err)
-		return nil, err
+		return err
 	}
 
 	// Set the ENI IP address and the default gateway if specified.
@@ -527,7 +560,7 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 		err = netlink.AddrAdd(link, address)
 		if err != nil {
 			log.Errorf("Failed to assign IP address to link %v: %v.", ifName, err)
-			return nil, err
+			return err
 		}
 
 		// If the gateway IP address was not specified, derive it from the ENI IP address.
@@ -536,7 +569,7 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 			subnet, err := vpc.NewSubnet(vpc.GetSubnetPrefix(ipAddress))
 			if err != nil {
 				log.Errorf("Failed to parse VPC subnet for %s: %v.", ipAddress, err)
-				return nil, err
+				return err
 			}
 
 			gatewayIPAddress = subnet.Gateways[0]
@@ -545,7 +578,7 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 		iface, err := net.InterfaceByName(ifName)
 		if err != nil {
 			log.Errorf("Failed to find link index: %v.", err)
-			return nil, err
+			return err
 		}
 
 		// Add default route to the specified gateway via ENI.
@@ -557,12 +590,92 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 		err = netlink.RouteAdd(route)
 		if err != nil {
 			log.Errorf("Failed to add IP route %+v: %v.", route, err)
-			return nil, err
+			return err
 		}
 	}
 
-	// Query the container interface MAC address.
-	link, _ = netlink.LinkByName(ifName)
+	return nil
+}
 
-	return link.Attrs().HardwareAddr, err
+// createTAPLink creates a TAP link in the target network namespace.
+func (nb *BridgeBuilder) createTAPLink(linkName string, tapLinkName string, uid int) error {
+	// Create the bridge link.
+	la := netlink.NewLinkAttrs()
+	la.Name = tapBridgeName
+	la.MTU = vpc.JumboFrameMTU
+	bridge := &netlink.Bridge{LinkAttrs: la}
+	log.Infof("Creating bridge link %+v.", bridge)
+	err := netlink.LinkAdd(bridge)
+	if err != nil {
+		log.Errorf("Failed to create bridge link: %v", err)
+		return err
+	}
+
+	// Set bridge link MTU.
+	err = netlink.LinkSetMTU(bridge, vpc.JumboFrameMTU)
+	if err != nil {
+		log.Errorf("Failed to set bridge link MTU: %v", err)
+		return err
+	}
+
+	// Set bridge link operational state up.
+	err = netlink.LinkSetUp(bridge)
+	if err != nil {
+		log.Errorf("Failed to set bridge link state: %v", err)
+		return err
+	}
+
+	// Connect link to the bridge.
+	la = netlink.NewLinkAttrs()
+	la.Name = linkName
+	link := &netlink.Dummy{LinkAttrs: la}
+	err = netlink.LinkSetMaster(link, bridge)
+	if err != nil {
+		log.Errorf("Failed to set link master: %v", err)
+		return err
+	}
+
+	// Create the TAP link.
+	la = netlink.NewLinkAttrs()
+	la.Name = tapLinkName
+	la.MasterIndex = bridge.Index
+	la.MTU = vpc.JumboFrameMTU
+	tapLink := &netlink.Tuntap{
+		LinkAttrs: la,
+		Mode:      netlink.TUNTAP_MODE_TAP,
+		Flags:     netlink.TUNTAP_ONE_QUEUE | netlink.TUNTAP_VNET_HDR,
+		Queues:    1,
+	}
+
+	log.Infof("Creating TAP link %+v.", tapLink)
+	err = netlink.LinkAdd(tapLink)
+	if err != nil {
+		log.Errorf("Failed to add TAP link: %v", err)
+		return err
+	}
+
+	// Set TAP link MTU.
+	err = netlink.LinkSetMTU(tapLink, vpc.JumboFrameMTU)
+	if err != nil {
+		log.Errorf("Failed to set TAP link MTU: %v", err)
+		return err
+	}
+
+	// Set TAP link ownership.
+	log.Infof("Setting TAP link owner to uid %d.", uid)
+	fd := int(tapLink.Fds[0].Fd())
+	err = unix.IoctlSetInt(fd, unix.TUNSETOWNER, uid)
+	if err != nil {
+		log.Errorf("Failed to set TAP link owner: %v", err)
+		return err
+	}
+
+	// Set TAP link operational state up.
+	err = netlink.LinkSetUp(tapLink)
+	if err != nil {
+		log.Errorf("Failed to set TAP link state: %v", err)
+		return err
+	}
+
+	return nil
 }
