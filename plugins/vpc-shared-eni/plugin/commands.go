@@ -14,8 +14,6 @@
 package plugin
 
 import (
-	"strings"
-
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/config"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/network"
@@ -37,15 +35,6 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	log.Infof("Executing ADD with netconfig: %+v ContainerID:%v Netns:%v IfName:%v Args:%v.",
 		netConfig, args.ContainerID, args.Netns, args.IfName, args.Args)
-
-	// If this container shares another container's network namespace, use that infrastructure
-	// container's ID instead. Orchestrators like Kubernetes and ECS use this feature to group
-	// a set of containers into a single deployment unit called pod (K8S) or task (ECS).
-	if strings.HasPrefix(args.Netns, "container:") {
-		cid := strings.TrimPrefix(args.Netns, "container:")
-		log.Infof("ContainerID %s shares the netns of containerID %s", args.ContainerID, cid)
-		args.ContainerID = cid
-	}
 
 	// Find the ENI.
 	sharedENI, err := eni.NewENI(netConfig.ENIName, netConfig.ENIMACAddress)

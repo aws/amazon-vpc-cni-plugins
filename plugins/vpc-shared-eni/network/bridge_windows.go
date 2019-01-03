@@ -127,12 +127,35 @@ func (nb *BridgeBuilder) DeleteNetwork(nw *Network) error {
 
 // FindOrCreateEndpoint creates a new HNS endpoint in the network.
 func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
+	// Query the infrastructure container ID.
+	isInfraContainer, infraContainerID, err := nb.getInfraContainerID(ep)
+	if err != nil {
+		return err
+	}
+
 	// Check if the endpoint already exists.
-	endpointName := nb.generateHNSEndpointName(ep)
+	endpointName := nb.generateHNSEndpointName(ep, infraContainerID)
 	hnsEndpoint, err := hcsshim.GetHNSEndpointByName(endpointName)
 	if err == nil {
 		log.Infof("Found existing HNS endpoint %s.", endpointName)
-		return nil
+		if isInfraContainer {
+			// This is a benign duplicate create call for an existing endpoint.
+			// The endpoint was already attached in a previous call. Ignore and return success.
+			log.Infof("HNS endpoint %s is already attached to container ID %s.",
+				endpointName, ep.ContainerID)
+		} else {
+			// Attach the existing endpoint to the container's network namespace.
+			err = nb.attachEndpoint(hnsEndpoint, ep.ContainerID)
+		}
+
+		ep.MACAddress, _ = net.ParseMAC(hnsEndpoint.MacAddress)
+		return err
+	} else {
+		if !isInfraContainer {
+			// The endpoint referenced in the container netns does not exist.
+			log.Errorf("Failed to find endpoint %s for container %s.", endpointName, ep.ContainerID)
+			return fmt.Errorf("failed to find endpoint %s: %v", endpointName, err)
+		}
 	}
 
 	// Initialize the HNS endpoint.
@@ -216,11 +239,17 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 
 	log.Infof("Received HNS endpoint response: %+v.", hnsResponse)
 
-	// Attach the HNS endpoint to container network namespace.
-	log.Infof("Attaching HNS endpoint %s to container %s.", hnsResponse.Id, ep.ContainerID)
-	err = hcsshim.HotAttachEndpoint(ep.ContainerID, hnsResponse.Id)
+	// Attach the HNS endpoint to the container's network namespace.
+	err = nb.attachEndpoint(hnsResponse, ep.ContainerID)
 	if err != nil {
-		log.Errorf("Failed to attach HNS endpoint. Ignoring failure: %v.", err)
+		// Cleanup the failed endpoint.
+		log.Infof("Deleting the failed HNS endpoint %s.", hnsEndpoint.Id)
+		_, delErr := hcsshim.HNSEndpointRequest("DELETE", hnsEndpoint.Id, "")
+		if delErr != nil {
+			log.Errorf("Failed to delete HNS endpoint: %v.", delErr)
+		}
+
+		return err
 	}
 
 	// Return network interface MAC address.
@@ -231,11 +260,29 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 
 // DeleteEndpoint deletes an existing HNS endpoint.
 func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
+	// Query the infrastructure container ID.
+	isInfraContainer, infraContainerID, err := nb.getInfraContainerID(ep)
+	if err != nil {
+		return err
+	}
+
 	// Find the HNS endpoint ID.
-	endpointName := nb.generateHNSEndpointName(ep)
+	endpointName := nb.generateHNSEndpointName(ep, infraContainerID)
 	hnsEndpoint, err := hcsshim.GetHNSEndpointByName(endpointName)
 	if err != nil {
 		return err
+	}
+
+	// Detach the HNS endpoint from the container's network namespace.
+	log.Infof("Detaching HNS endpoint %s from container %s netns.", hnsEndpoint.Id, ep.ContainerID)
+	err = hcsshim.HotDetachEndpoint(ep.ContainerID, hnsEndpoint.Id)
+	if err != nil {
+		return err
+	}
+
+	// The rest of the delete logic applies to infrastructure container only.
+	if !isInfraContainer {
+		return nil
 	}
 
 	// Delete the HNS endpoint.
@@ -246,6 +293,68 @@ func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
 	}
 
 	return err
+}
+
+// attachEndpoint attaches an HNS endpoint to a container's network namespace.
+func (nb *BridgeBuilder) attachEndpoint(ep *hcsshim.HNSEndpoint, containerID string) error {
+	log.Infof("Attaching HNS endpoint %s to container %s.", ep.Id, containerID)
+	err := hcsshim.HotAttachEndpoint(containerID, ep.Id)
+	if err != nil {
+		// Attach can fail if the container is no longer running and/or its network namespace
+		// has been cleaned up.
+		log.Errorf("Failed to attach HNS endpoint %s: %v.", ep.Id, err)
+	}
+
+	return err
+}
+
+// addEndpointPolicy adds a policy to an HNS endpoint.
+func (nb *BridgeBuilder) addEndpointPolicy(ep *hcsshim.HNSEndpoint, policy interface{}) error {
+	buf, err := json.Marshal(policy)
+	if err != nil {
+		log.Errorf("Failed to encode policy: %v.", err)
+		return err
+	}
+
+	ep.Policies = append(ep.Policies, buf)
+
+	return nil
+}
+
+// getInfraContainerID returns the infrastructure container ID for the given endpoint.
+func (nb *BridgeBuilder) getInfraContainerID(ep *Endpoint) (bool, string, error) {
+	// Orchestrators like Kubernetes and ECS group a set of containers into deployment units called
+	// pods or tasks. The orchestrator agent injects a special container called infrastructure
+	// (a.k.a. pause) container into each group to create and share namespaces with the other
+	// containers in the same group.
+	//
+	// Normally, the CNI plugin is called only once, for the infrastructure container. It does not
+	// need to know about infrastructure containers and is not even aware of the other containers
+	// in the group. However, on older versions of Kubernetes and Windows (pre-1809), CNI plugin is
+	// called for each container in the pod separately so that the plugin can attach the endpoint
+	// to each container. The logic below is necessary to detect infrastructure containers and
+	// maintain compatibility with those older versions.
+
+	const containerPrefix string = "container:"
+	var isInfraContainer bool
+	var infraContainerID string
+
+	if ep.NetNSName == "none" || ep.NetNSName == "" {
+		// This is the first, i.e. infrastructure, container in the group.
+		isInfraContainer = true
+		infraContainerID = ep.ContainerID
+	} else if strings.HasPrefix(ep.NetNSName, containerPrefix) {
+		// This is a workload container sharing the netns of a previously created infra container.
+		isInfraContainer = false
+		infraContainerID = strings.TrimPrefix(ep.NetNSName, containerPrefix)
+		log.Infof("Container %s shares netns of container %s", ep.ContainerID, infraContainerID)
+	} else {
+		// This is an unexpected case.
+		log.Errorf("Failed to parse netns %s of container %s", ep.NetNSName, ep.ContainerID)
+		return false, "", fmt.Errorf("failed to parse netns %s", ep.NetNSName)
+	}
+
+	return isInfraContainer, infraContainerID, nil
 }
 
 // checkHNSVersion returns whether the Windows Host Networking Service version is supported.
@@ -270,23 +379,17 @@ func (nb *BridgeBuilder) checkHNSVersion() error {
 
 // generateHNSNetworkName generates a deterministic unique name for an HNS network.
 func (nb *BridgeBuilder) generateHNSNetworkName(nw *Network) string {
-	return fmt.Sprintf(hnsNetworkNameFormat, nw.Name, nw.SharedENI.GetMACAddress().String())
+	// Use the MAC address of the shared ENI as the deterministic unique identifier.
+	id := strings.Replace(nw.SharedENI.GetMACAddress().String(), ":", "", -1)
+	return fmt.Sprintf(hnsNetworkNameFormat, nw.Name, id)
 }
 
 // generateHNSEndpointName generates a deterministic unique name for an HNS endpoint.
-func (nb *BridgeBuilder) generateHNSEndpointName(ep *Endpoint) string {
-	return fmt.Sprintf(hnsEndpointNameFormat, ep.ContainerID)
-}
-
-// addEndpointPolicy adds a policy to an HNS endpoint.
-func (nb *BridgeBuilder) addEndpointPolicy(ep *hcsshim.HNSEndpoint, policy interface{}) error {
-	buf, err := json.Marshal(policy)
-	if err != nil {
-		log.Errorf("Failed to encode policy: %v.", err)
-		return err
+func (nb *BridgeBuilder) generateHNSEndpointName(ep *Endpoint, id string) string {
+	// Use the given optional identifier or the container ID itself as the unique identifier.
+	if id == "" {
+		id = ep.ContainerID
 	}
 
-	ep.Policies = append(ep.Policies, buf)
-
-	return nil
+	return fmt.Sprintf(hnsEndpointNameFormat, id)
 }
