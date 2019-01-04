@@ -33,7 +33,7 @@ type KubernetesConfig struct {
 	Namespace           string
 	PodName             string
 	PodInfraContainerID string
-	ServiceSubnet       string
+	ServiceCIDR         string
 }
 
 const (
@@ -41,7 +41,7 @@ const (
 	ignoreUnknown = true
 
 	// EKS defaults for various Kubernetes cluster configuration values.
-	defaultEKSServiceSubnet  = "10.100.0.0/16"
+	defaultEKSServiceCIDR    = "10.100.0.0/16"
 	defaultEKSDNSNameServers = "10.100.0.10"
 	defaultEKSDNSDomain      = "svc.cluster.local"
 )
@@ -65,8 +65,8 @@ func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs) error {
 	kc.PodInfraContainerID = string(ka.K8S_POD_INFRA_CONTAINER_ID)
 
 	// Default to EKS values.
-	if kc.ServiceSubnet == "" {
-		kc.ServiceSubnet = defaultEKSServiceSubnet
+	if kc.ServiceCIDR == "" {
+		kc.ServiceCIDR = defaultEKSServiceCIDR
 	}
 	if netConfig.DNS.Nameservers == nil {
 		netConfig.DNS.Nameservers = []string{defaultEKSDNSNameServers}

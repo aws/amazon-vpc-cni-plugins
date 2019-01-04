@@ -171,12 +171,20 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	pl, _ := ep.IPAddress.Mask.Size()
 	hnsEndpoint.PrefixLength = uint8(pl)
 
-	// SNAT endpoint traffic to ENI primary IP address
-	// except if the destination is in the same VPC.
-	snatExceptions := []string{vpc.GetSubnetPrefix(nw.ENIIPAddress).String()}
-	if nw.ServiceSubnet != "" {
+	// SNAT endpoint traffic to ENI primary IP address...
+	var snatExceptions []string
+	if nw.VPCCIDRs == nil {
+		// ...except if the destination is in the same subnet as the ENI.
+		snatExceptions = []string{vpc.GetSubnetPrefix(nw.ENIIPAddress).String()}
+	} else {
+		// ...or, if known, the same VPC.
+		for _, cidr := range nw.VPCCIDRs {
+			snatExceptions = append(snatExceptions, cidr.String())
+		}
+	}
+	if nw.ServiceCIDR != "" {
 		// ...or the destination is a service endpoint.
-		snatExceptions = append(snatExceptions, nw.ServiceSubnet)
+		snatExceptions = append(snatExceptions, nw.ServiceCIDR)
 	}
 
 	err = nb.addEndpointPolicy(
@@ -193,14 +201,14 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 
 	// Route traffic sent to service endpoints to the host. The load balancer running
 	// in the host network namespace then forwards traffic to its final destination.
-	if nw.ServiceSubnet != "" {
+	if nw.ServiceCIDR != "" {
 		// Set route policy for service subnet.
 		// NextHop is implicitly the host.
 		err = nb.addEndpointPolicy(
 			hnsEndpoint,
 			hnsRoutePolicy{
 				Policy:            hcsshim.Policy{Type: hcsshim.Route},
-				DestinationPrefix: nw.ServiceSubnet,
+				DestinationPrefix: nw.ServiceCIDR,
 				NeedEncap:         true,
 			})
 		if err != nil {

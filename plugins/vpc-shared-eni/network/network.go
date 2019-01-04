@@ -35,9 +35,10 @@ type Network struct {
 	SharedENI        *eni.ENI
 	ENIIPAddress     *net.IPNet
 	GatewayIPAddress net.IP
+	VPCCIDRs         []net.IPNet
 	DNSServers       []string
 	DNSSuffix        string
-	ServiceSubnet    string
+	ServiceCIDR      string
 }
 
 // Endpoint represents a container network interface.

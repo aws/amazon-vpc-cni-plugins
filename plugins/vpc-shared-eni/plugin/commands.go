@@ -60,9 +60,10 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		SharedENI:        sharedENI,
 		ENIIPAddress:     netConfig.ENIIPAddress,
 		GatewayIPAddress: netConfig.GatewayIPAddress,
+		VPCCIDRs:         netConfig.VPCCIDRs,
 		DNSServers:       netConfig.DNS.Nameservers,
 		DNSSuffix:        netConfig.DNS.Domain,
-		ServiceSubnet:    netConfig.Kubernetes.ServiceSubnet,
+		ServiceCIDR:      netConfig.Kubernetes.ServiceCIDR,
 	}
 
 	err = nb.FindOrCreateNetwork(&nw)

@@ -33,6 +33,7 @@ type NetConfig struct {
 	ENIName          string
 	ENIMACAddress    net.HardwareAddr
 	ENIIPAddress     *net.IPNet
+	VPCCIDRs         []net.IPNet
 	BridgeNetNSPath  string
 	IPAddress        *net.IPNet
 	GatewayIPAddress net.IP
@@ -44,15 +45,16 @@ type NetConfig struct {
 // netConfigJSON defines the network configuration JSON file format for the vpc-shared-eni plugin.
 type netConfigJSON struct {
 	cniTypes.NetConf
-	ENIName          string `json:"eniName"`
-	ENIMACAddress    string `json:"eniMACAddress"`
-	ENIIPAddress     string `json:"eniIPAddress"`
-	BridgeNetNSPath  string `json:"bridgeNetNSPath"`
-	IPAddress        string `json:"ipAddress"`
-	GatewayIPAddress string `json:"gatewayIPAddress"`
-	InterfaceType    string `json:"interfaceType"`
-	TapUserID        string `json:"tapUserID"`
-	ServiceSubnet    string `json:"serviceSubnet"`
+	ENIName          string   `json:"eniName"`
+	ENIMACAddress    string   `json:"eniMACAddress"`
+	ENIIPAddress     string   `json:"eniIPAddress"`
+	VPCCIDRs         []string `json:"vpcCIDRs"`
+	BridgeNetNSPath  string   `json:"bridgeNetNSPath"`
+	IPAddress        string   `json:"ipAddress"`
+	GatewayIPAddress string   `json:"gatewayIPAddress"`
+	InterfaceType    string   `json:"interfaceType"`
+	TapUserID        string   `json:"tapUserID"`
+	ServiceCIDR      string   `json:"serviceCIDR"`
 }
 
 const (
@@ -94,7 +96,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		ENIName:         config.ENIName,
 		BridgeNetNSPath: config.BridgeNetNSPath,
 		Kubernetes: KubernetesConfig{
-			ServiceSubnet: config.ServiceSubnet,
+			ServiceCIDR: config.ServiceCIDR,
 		},
 	}
 
@@ -111,6 +113,17 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		netConfig.ENIIPAddress, err = vpc.GetIPAddressFromString(config.ENIIPAddress)
 		if err != nil {
 			return nil, fmt.Errorf("invalid ENIIPAddress %s", config.ENIIPAddress)
+		}
+	}
+
+	// Parse the optional VPC CIDR blocks.
+	if config.VPCCIDRs != nil {
+		for _, cidrString := range config.VPCCIDRs {
+			_, cidr, err := net.ParseCIDR(cidrString)
+			if err != nil {
+				return nil, fmt.Errorf("invalid VPCCIDR %s", cidrString)
+			}
+			netConfig.VPCCIDRs = append(netConfig.VPCCIDRs, *cidr)
 		}
 	}
 
