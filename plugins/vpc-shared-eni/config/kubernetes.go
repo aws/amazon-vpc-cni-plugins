@@ -39,11 +39,6 @@ type KubernetesConfig struct {
 const (
 	// ignoreUnknown specifies whether unknown CNI arguments are ignored.
 	ignoreUnknown = true
-
-	// EKS defaults for various Kubernetes cluster configuration values.
-	defaultEKSServiceCIDR    = "10.100.0.0/16"
-	defaultEKSDNSNameServers = "10.100.0.10"
-	defaultEKSDNSDomain      = "svc.cluster.local"
 )
 
 // parseKubernetesArgs parses Kubernetes-specific CNI arguments.
@@ -63,17 +58,6 @@ func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs) error {
 	kc.Namespace = string(ka.K8S_POD_NAMESPACE)
 	kc.PodName = string(ka.K8S_POD_NAME)
 	kc.PodInfraContainerID = string(ka.K8S_POD_INFRA_CONTAINER_ID)
-
-	// Default to EKS values.
-	if kc.ServiceCIDR == "" {
-		kc.ServiceCIDR = defaultEKSServiceCIDR
-	}
-	if netConfig.DNS.Nameservers == nil {
-		netConfig.DNS.Nameservers = []string{defaultEKSDNSNameServers}
-	}
-	if netConfig.DNS.Domain == "" {
-		netConfig.DNS.Domain = defaultEKSDNSDomain
-	}
 
 	return nil
 }
