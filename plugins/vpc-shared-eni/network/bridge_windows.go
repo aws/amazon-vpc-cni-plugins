@@ -251,8 +251,8 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	err = nb.attachEndpoint(hnsResponse, ep.ContainerID)
 	if err != nil {
 		// Cleanup the failed endpoint.
-		log.Infof("Deleting the failed HNS endpoint %s.", hnsEndpoint.Id)
-		_, delErr := hcsshim.HNSEndpointRequest("DELETE", hnsEndpoint.Id, "")
+		log.Infof("Deleting the failed HNS endpoint %s.", hnsResponse.Id)
+		_, delErr := hcsshim.HNSEndpointRequest("DELETE", hnsResponse.Id, "")
 		if delErr != nil {
 			log.Errorf("Failed to delete HNS endpoint: %v.", delErr)
 		}
