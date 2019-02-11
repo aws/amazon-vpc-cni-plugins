@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"strconv"
 
+	"github.com/aws/amazon-vpc-cni-plugins/capabilities"
 	"github.com/aws/amazon-vpc-cni-plugins/logger"
 	"github.com/aws/amazon-vpc-cni-plugins/version"
 
@@ -36,6 +37,7 @@ type Plugin struct {
 	SpecVersions cniVersion.PluginInfo
 	LogFilePath  string
 	Commands     API
+	Capability   *capabilities.Capability
 }
 
 // NewPlugin creates a new CNI Plugin object.
@@ -50,6 +52,7 @@ func NewPlugin(
 		SpecVersions: specVersions,
 		LogFilePath:  logFilePath,
 		Commands:     cmds,
+		Capability:   capabilities.New(),
 	}, nil
 }
 
@@ -70,14 +73,24 @@ func (plugin *Plugin) Run() *cniTypes.Error {
 	defer log.Flush()
 
 	// Parse command line arguments.
-	var printVersion bool
+	var printVersion, printCapabilities bool
 	flag.BoolVar(&printVersion, version.Command, false, "prints version and exits")
+	flag.BoolVar(&printCapabilities, capabilities.Command, false, "prints capabilities and exits")
 	flag.Parse()
 
 	if printVersion {
 		err := plugin.printVersionInfo()
 		if err != nil {
 			os.Stderr.WriteString(fmt.Sprintf("Failed to print version: %v", err))
+			return nil
+		}
+		return nil
+	}
+
+	if printCapabilities {
+		err := plugin.Capability.Print()
+		if err != nil {
+			os.Stderr.WriteString(fmt.Sprintf("Failed to print capabilities: %v", err))
 			return nil
 		}
 		return nil

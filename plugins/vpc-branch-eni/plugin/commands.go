@@ -18,6 +18,7 @@ import (
 	"net"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
+	"github.com/aws/amazon-vpc-cni-plugins/network/imds"
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-branch-eni/config"
@@ -116,6 +117,14 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 			// Container is running in a VM.
 			// Connect the branch ENI to a MACVTAP link in the target network namespace.
 			err = plugin.createMACVTAPLink(args.IfName, branch.GetLinkIndex())
+		}
+
+		// Add a blackhole route for IMDS endpoint if required.
+		if netConfig.BlockIMDS {
+			err = imds.BlockInstanceMetadataEndpoint()
+			if err != nil {
+				return err
+			}
 		}
 
 		// Set branch link operational state up. VLAN interfaces were already brought up above.

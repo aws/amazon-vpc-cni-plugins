@@ -37,6 +37,7 @@ type NetConfig struct {
 	BranchGatewayIPAddress net.IP
 	InterfaceType          string
 	UserName               string
+	BlockIMDS              bool
 }
 
 // netConfigJSON defines the network configuration JSON file format for the vpc-branch-eni plugin.
@@ -50,6 +51,7 @@ type netConfigJSON struct {
 	BranchGatewayIPAddress string `json:"branchGatewayIPAddress"`
 	InterfaceType          string `json:"interfaceType"`
 	UserName               string `json:"userName"`
+	BlockIMDS              bool   `json:"blockInstanceMetadata"`
 }
 
 // pcArgs defines the per-container arguments passed in CNI_ARGS environment variable.
@@ -122,6 +124,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		TrunkName:     config.TrunkName,
 		InterfaceType: config.InterfaceType,
 		UserName:      config.UserName,
+		BlockIMDS:     config.BlockIMDS,
 	}
 
 	// Parse the trunk MAC address.

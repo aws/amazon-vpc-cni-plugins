@@ -17,11 +17,6 @@ import (
 	"net"
 )
 
-const (
-	// JumboFrameMTU is the Jumbo Ethernet Frame Maximum Transmission Unit size in bytes.
-	JumboFrameMTU = 9000
-)
-
 var (
 	// Well-known VPC default gateway host ID.
 	defaultGatewayHostID = []byte{0, 0, 0, 1}

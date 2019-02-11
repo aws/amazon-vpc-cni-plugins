@@ -14,6 +14,7 @@
 package plugin
 
 import (
+	"github.com/aws/amazon-vpc-cni-plugins/capabilities"
 	"github.com/aws/amazon-vpc-cni-plugins/cni"
 
 	cniVersion "github.com/containernetworking/cni/pkg/version"
@@ -37,7 +38,7 @@ type Plugin struct {
 	*cni.Plugin
 }
 
-// NewPlugin creates a new Plugin object.
+// NewPlugin creates a new vpc-branch-eni Plugin object.
 func NewPlugin() (*Plugin, error) {
 	var err error
 	plugin := &Plugin{}
@@ -46,6 +47,9 @@ func NewPlugin() (*Plugin, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Capabilities for vpc-branch-eni includes awsvpc-network-mode.
+	plugin.Plugin.Capability = capabilities.New(capabilities.TaskENICapability)
 
 	return plugin, nil
 }

@@ -38,6 +38,10 @@ var (
 			pcArgs:    "",
 		},
 		config{
+			netConfig: `{"trunkMACAddress":"42:42:42:42:42:42", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14", "blockInstanceMetadata":true}`,
+			pcArgs:    "",
+		},
+		config{
 			netConfig: `{"trunkName":"eth1"}`,
 			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
 		},
