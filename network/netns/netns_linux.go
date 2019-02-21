@@ -1,4 +1,4 @@
-// Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -149,6 +149,11 @@ func (ns *netNS) Close() error {
 // GetFd returns a file descriptor for the underlying netns.
 func (ns *netNS) GetFd() uintptr {
 	return ns.file.Fd()
+}
+
+// GetPath returns the filesystem path for the underlying netns.
+func (ns *netNS) GetPath() string {
+	return ns.file.Name()
 }
 
 // Set sets the current thread's netns to the underlying netns.

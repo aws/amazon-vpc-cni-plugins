@@ -1,0 +1,213 @@
+// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"). You may
+// not use this file except in compliance with the License. A copy of the
+// License is located at
+//
+//     http://aws.amazon.com/apache2.0/
+//
+// or in the "license" file accompanying this file. This file is distributed
+// on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+// express or implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+package config
+
+import (
+	"encoding/json"
+	"fmt"
+	"net"
+	"strconv"
+	"strings"
+
+	log "github.com/cihub/seelog"
+	cniSkel "github.com/containernetworking/cni/pkg/skel"
+	cniTypes "github.com/containernetworking/cni/pkg/types"
+	"github.com/pkg/errors"
+)
+
+// NetConfig defines the network configuration for the aws-appmesh cni plugin.
+type NetConfig struct {
+	cniTypes.NetConf
+	IgnoredUID         string
+	IgnoredGID         string
+	ProxyIngressPort   string
+	ProxyEgressPort    string
+	AppPorts           string
+	EgressIgnoredPorts string
+	EgressIgnoredIPv4s string
+	EgressIgnoredIPv6s string
+}
+
+// netConfigJSON defines the network configuration JSON file format for the aws-appmesh cni plugin.
+type netConfigJSON struct {
+	cniTypes.NetConf
+	IgnoredUID         string   `json:"ignoredUID"`
+	IgnoredGID         string   `json:"ignoredGID"`
+	ProxyIngressPort   string   `json:"proxyIngressPort"`
+	ProxyEgressPort    string   `json:"proxyEgressPort"`
+	AppPorts           []string `json:"appPorts"`
+	EgressIgnoredPorts []string `json:"egressIgnoredPorts"`
+	EgressIgnoredIPs   []string `json:"egressIgnoredIPs"`
+}
+
+const (
+	splitter  = ","
+	ipv4Proto = "IPv4"
+	ipv6Proto = "IPv6"
+)
+
+// New creates a new NetConfig object by parsing the given CNI arguments.
+func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
+	// Parse network configuration.
+	var config netConfigJSON
+	if err := json.Unmarshal(args.StdinData, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse network config: %v", err)
+	}
+
+	// Validate network configuration.
+	if err := validateConfig(config); err != nil {
+		return nil, err
+	}
+
+	// Get separate lists of IPv4 address/CIDR block and IPv6 address/CIDR block.
+	ipv4s, ipv6s, err := separateIPs(config.EgressIgnoredIPs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate NetConfig.
+	netConfig := NetConfig{
+		NetConf:            config.NetConf,
+		IgnoredUID:         config.IgnoredUID,
+		IgnoredGID:         config.IgnoredGID,
+		ProxyIngressPort:   config.ProxyIngressPort,
+		ProxyEgressPort:    config.ProxyEgressPort,
+		AppPorts:           strings.Join(config.AppPorts, splitter),
+		EgressIgnoredIPv4s: ipv4s,
+		EgressIgnoredIPv6s: ipv6s,
+		EgressIgnoredPorts: strings.Join(config.EgressIgnoredPorts, splitter),
+	}
+
+	// Validation complete. Return the parsed NetConfig object.
+	log.Debugf("Created NetConfig: %+v", netConfig)
+	return &netConfig, nil
+}
+
+// validateConfig validates network configuration.
+func validateConfig(config netConfigJSON) error {
+	// Validate if all the required fields are present.
+	if config.IgnoredGID == "" && config.IgnoredUID == "" {
+		return fmt.Errorf("missing required parameter ignoredGID or ignoredUID")
+	}
+	if len(config.AppPorts) == 0 {
+		return fmt.Errorf("missing required parameter appPorts")
+	}
+	if config.ProxyEgressPort == "" {
+		return fmt.Errorf("missing required parameter proxyEgressPort")
+	}
+	if config.ProxyIngressPort == "" {
+		return fmt.Errorf("missing required parameter proxyIngressPort")
+	}
+
+	// Validate the format of all fields.
+	if err := isValidID(config.IgnoredGID); err != nil {
+		return err
+	}
+	if err := isValidID(config.IgnoredUID); err != nil {
+		return err
+	}
+	if err := isValidPort(config.ProxyEgressPort); err != nil {
+		return err
+	}
+	if err := isValidPort(config.ProxyIngressPort); err != nil {
+		return err
+	}
+
+	for _, port := range config.AppPorts {
+		if err := isValidPort(port); err != nil {
+			return err
+		}
+	}
+
+	for _, port := range config.EgressIgnoredPorts {
+		if err := isValidPort(port); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// separateIPs separate IPv4 addresses/CIDR block and IPv6 addresses/CIDR block
+// into two lists.
+func separateIPs(ignoredIPs []string) (string, string, error) {
+	if len(ignoredIPs) == 0 {
+		return "", "", nil
+	}
+
+	var ipv4s, ipv6s []string
+	for _, ip := range ignoredIPs {
+		trimIP := strings.TrimSpace(ip)
+		proto, valid := isValidIPAddressOrCIDR(trimIP)
+		if !valid {
+			return "", "", errors.Errorf("invalid IP or CIDR block [%s] specified in egressIgnoredIPs", trimIP)
+		}
+
+		if proto == ipv4Proto {
+			ipv4s = append(ipv4s, trimIP)
+		} else {
+			ipv6s = append(ipv6s, trimIP)
+		}
+
+	}
+	return strings.Join(ipv4s, splitter), strings.Join(ipv6s, splitter), nil
+}
+
+// isValidID checks whether the id only has digits.
+func isValidID(id string) error {
+	if id == "" {
+		return nil
+	}
+
+	i, err := strconv.Atoi(id)
+	if err == nil && i > 0 {
+		return nil
+	}
+
+	return errors.Errorf("invalid uid/gid [%s] specified", id)
+}
+
+// isValidPort checks whether the port only has digits.
+func isValidPort(port string) error {
+	if port == "" {
+		return nil
+	}
+
+	i, err := strconv.Atoi(port)
+	if err == nil && i > 0 {
+		return nil
+	}
+
+	return errors.Errorf("invalid port [%s] specified", port)
+}
+
+// isValidIPAddressOrCIDR checks whether the input is a valid IP addresses/CIDR block and checks the IP protocol.
+func isValidIPAddressOrCIDR(address string) (string, bool) {
+	ip := net.ParseIP(address)
+	var err error
+	if ip == nil {
+		// Check whether it is a valid CIDR block.
+		ip, _, err = net.ParseCIDR(address)
+		if err != nil {
+			return "", false
+		}
+	}
+
+	// There's no To6() method in the `net` package. Instead, just check that
+	// it's not a valid `v4` IP.
+	if ip.To4() != nil {
+		return ipv4Proto, true
+	}
+	return ipv6Proto, true
+}

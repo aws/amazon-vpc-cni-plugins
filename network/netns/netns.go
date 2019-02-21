@@ -1,4 +1,4 @@
-// Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -17,6 +17,8 @@ package netns
 type NetNS interface {
 	// GetFd returns a file descriptor for the underlying netns.
 	GetFd() uintptr
+	// Path returns the filesystem path representing the underlying netns.
+	GetPath() string
 	// Close releases the reference to the underlying netns.
 	Close() error
 	// Set sets the current thread's netns to the underlying netns.

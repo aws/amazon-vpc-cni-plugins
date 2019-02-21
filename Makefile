@@ -17,6 +17,7 @@ GOARCH ?= amd64
 CGO_ENABLED = 0
 
 # Build directories.
+CUR_DIR = $(shell pwd)
 BUILD_ROOT_DIR = build
 BUILD_DIR = $(BUILD_ROOT_DIR)/$(GOOS)_$(GOARCH)
 CREATE_BUILD_ROOT_DIR := $(shell mkdir -p $(BUILD_DIR))
@@ -45,6 +46,7 @@ VPC_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-eni -type f)
 VPC_SHARED_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-shared-eni -type f)
 VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-eni -type f)
 VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-pat-eni -type f)
+AWS_APPMESH_PLUGIN_SOURCE_FILES = $(shell find plugins/aws-appmesh -type f)
 ALL_SOURCE_FILES := $(shell find . -name '*.go')
 
 # Shorthand build targets.
@@ -52,7 +54,8 @@ vpc-eni: $(BUILD_DIR)/vpc-eni
 vpc-shared-eni: $(BUILD_DIR)/vpc-shared-eni
 vpc-branch-eni: $(BUILD_DIR)/vpc-branch-eni
 vpc-branch-pat-eni: $(BUILD_DIR)/vpc-branch-pat-eni
-all-binaries: vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni
+aws-appmesh: $(BUILD_DIR)/aws-appmesh
+all-binaries: vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni aws-appmesh
 build: all-binaries unit-test
 
 # Build the vpc-eni CNI plugin.
@@ -95,6 +98,16 @@ $(BUILD_DIR)/vpc-branch-pat-eni: $(VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES) $(COM
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-branch-pat-eni
 	@echo "Built vpc-branch-pat-eni plugin."
 
+# Build the aws-appmesh CNI plugin.
+$(BUILD_DIR)/aws-appmesh: $(AWS_APPMESH_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
+	go build \
+		-installsuffix cgo \
+		-v \
+		-ldflags $(LINKER_FLAGS) \
+		-o $(BUILD_DIR)/aws-appmesh \
+		github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh
+	@echo "Built aws-appmesh plugin."
+
 # Run all unit tests.
 .PHONY: unit-test
 unit-test: $(ALL_SOURCE_FILES)
@@ -103,7 +116,12 @@ unit-test: $(ALL_SOURCE_FILES)
 # Run all integration tests.
 .PHONY: integration-test
 integration-test: $(ALL_SOURCE_FILES)
-	go test -v -tags integration -race -timeout 10s ./...
+	go test -v -tags integration_test -race -timeout 10s ./...
+
+# Run all e2e tests.
+.PHONY: e2e-test
+e2e-test:  $(ALL_SOURCE_FILES) all-binaries
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 120s ./...
 
 # Clean all build artifacts.
 .PHONY: clean
