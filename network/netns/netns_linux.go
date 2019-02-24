@@ -184,10 +184,11 @@ func (ns *netNS) Run(toRun func() error) error {
 	go func() {
 		defer wg.Done()
 		runtime.LockOSThread()
+		var threadNS NetNS
 
 		// Save the thread's current network namespace and
 		// restore it after this go routine completes.
-		threadNS, err := GetNetNSByPath(getCurrentThreadNetNSPath())
+		threadNS, err = GetNetNSByPath(getCurrentThreadNetNSPath())
 		if err != nil {
 			err = fmt.Errorf("Failed to open current netns: %v", err)
 			return
