@@ -63,6 +63,7 @@ $(BUILD_DIR)/vpc-eni: $(VPC_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
 	go build \
 		-installsuffix cgo \
 		-v \
+		-a \
 		-ldflags $(LINKER_FLAGS) \
 		-o $(BUILD_DIR)/vpc-eni \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-eni
@@ -73,6 +74,7 @@ $(BUILD_DIR)/vpc-shared-eni: $(VPC_SHARED_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOUR
 	go build \
 		-installsuffix cgo \
 		-v \
+		-a \
 		-ldflags $(LINKER_FLAGS) \
 		-o $(BUILD_DIR)/vpc-shared-eni \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni
@@ -83,6 +85,7 @@ $(BUILD_DIR)/vpc-branch-eni: $(VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOUR
 	go build \
 		-installsuffix cgo \
 		-v \
+		-a \
 		-ldflags $(LINKER_FLAGS) \
 		-o $(BUILD_DIR)/vpc-branch-eni \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-branch-eni
@@ -93,6 +96,7 @@ $(BUILD_DIR)/vpc-branch-pat-eni: $(VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES) $(COM
 	go build \
 		-installsuffix cgo \
 		-v \
+		-a \
 		-ldflags $(LINKER_FLAGS) \
 		-o $(BUILD_DIR)/vpc-branch-pat-eni \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-branch-pat-eni
@@ -103,6 +107,7 @@ $(BUILD_DIR)/aws-appmesh: $(AWS_APPMESH_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FIL
 	go build \
 		-installsuffix cgo \
 		-v \
+		-a \
 		-ldflags $(LINKER_FLAGS) \
 		-o $(BUILD_DIR)/aws-appmesh \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh
