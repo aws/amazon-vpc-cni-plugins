@@ -37,6 +37,7 @@ type NetConfig struct {
 	EgressIgnoredPorts string
 	EgressIgnoredIPv4s string
 	EgressIgnoredIPv6s string
+	EnableIPv6         bool
 }
 
 // netConfigJSON defines the network configuration JSON file format for the aws-appmesh cni plugin.
@@ -49,6 +50,7 @@ type netConfigJSON struct {
 	AppPorts           []string `json:"appPorts"`
 	EgressIgnoredPorts []string `json:"egressIgnoredPorts"`
 	EgressIgnoredIPs   []string `json:"egressIgnoredIPs"`
+	EnableIPv6         bool     `json:"enableIPv6"`
 }
 
 const (
@@ -87,6 +89,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		EgressIgnoredIPv4s: ipv4s,
 		EgressIgnoredIPv6s: ipv6s,
 		EgressIgnoredPorts: strings.Join(config.EgressIgnoredPorts, splitter),
+		EnableIPv6:         config.EnableIPv6,
 	}
 
 	// Validation complete. Return the parsed NetConfig object.

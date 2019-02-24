@@ -54,7 +54,8 @@ const (
     "proxyIngressPort":"8000",
     "appPorts":["5000","5001"],
     "egressIgnoredPorts":["80","81"],
-    "egressIgnoredIPs":["192.168.100.0/22","163.107.163.107","2001:0db8:85a3:0000:0000:8a2e:0370:7334"]
+    "egressIgnoredIPs":["192.168.100.0/22","163.107.163.107","2001:0db8:85a3:0000:0000:8a2e:0370:7334"],
+    "enableIPv6":true
 }`
 	netConfMissingParam = `
 {
@@ -183,8 +184,8 @@ func TestAddReturnError(t *testing.T) {
 
 // validateIPRules validates IP rules created in the target network namespace.
 func validateIPRules(t *testing.T) {
+	protocols := []iptables.Protocol{iptables.ProtocolIPv4, iptables.ProtocolIPv6}
 
-	protocols := []iptables.Protocol{iptables.ProtocolIPv4, iptables.ProtocolIPv4}
 	for _, proto := range protocols {
 		iptable, err := iptables.NewWithProtocol(proto)
 		require.NoError(t, err, "Unable to initialize iptable")
@@ -230,7 +231,8 @@ func validateIPRules(t *testing.T) {
 
 // validateIPRulesDeleted validates IP rules deleted in the target network namespace.
 func validateIPRulesDeleted(t *testing.T) {
-	protocols := []iptables.Protocol{iptables.ProtocolIPv4, iptables.ProtocolIPv4}
+	protocols := []iptables.Protocol{iptables.ProtocolIPv4, iptables.ProtocolIPv6}
+
 	for _, proto := range protocols {
 		iptable, err := iptables.NewWithProtocol(proto)
 		require.NoError(t, err, "Unable to initialize iptable")

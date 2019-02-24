@@ -54,7 +54,9 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		var err error
 		ipProtoMap := make(map[iptables.Protocol]string)
 		ipProtoMap[iptables.ProtocolIPv4] = netConfig.EgressIgnoredIPv4s
-		ipProtoMap[iptables.ProtocolIPv6] = netConfig.EgressIgnoredIPv6s
+		if netConfig.EnableIPv6 {
+			ipProtoMap[iptables.ProtocolIPv6] = netConfig.EgressIgnoredIPv6s
+		}
 
 		for proto, ignoredIPs := range ipProtoMap {
 			err = plugin.setupIptablesRules(proto, netConfig, ignoredIPs)
@@ -101,7 +103,11 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 
 	// Delete IP rules in the target network namespace.
 	err = ns.Run(func() error {
-		ipProtos := []iptables.Protocol{iptables.ProtocolIPv4, iptables.ProtocolIPv6}
+		ipProtos := []iptables.Protocol{iptables.ProtocolIPv4}
+		if netConfig.EnableIPv6 {
+			ipProtos = append(ipProtos, iptables.ProtocolIPv6)
+		}
+
 		for _, proto := range ipProtos {
 			err = plugin.deleteIptablesRules(proto)
 			if err != nil {
