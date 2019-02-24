@@ -24,7 +24,7 @@ const (
 	pluginName = "aws-appmesh"
 
 	// logFilePath is the path to the plugin's log file.
-	logFilePath = "/var/log/aws-appmesh.log"
+	logFilePath = "/log/aws-appmesh.log"
 )
 
 var (
