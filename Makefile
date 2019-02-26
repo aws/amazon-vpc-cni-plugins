@@ -118,6 +118,11 @@ $(BUILD_DIR)/aws-appmesh: $(AWS_APPMESH_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FIL
 unit-test: $(ALL_SOURCE_FILES)
 	go test -v -cover -race -timeout 10s ./...
 
+# Run aws-appmesh unit tests.
+.PHONY: appmesh-unit-test
+appmesh-unit-test:
+	go test -v -cover -race -timeout 10s ./plugins/aws-appmesh/...
+
 # Run all integration tests.
 .PHONY: integration-test
 integration-test: $(ALL_SOURCE_FILES)

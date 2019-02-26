@@ -24,6 +24,7 @@
 #   go-tests = true
 #   unused-packages = true
 
+ignored = ["k8s.io/*"]
 
 [[constraint]]
   name = "github.com/cihub/seelog"
