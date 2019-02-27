@@ -112,37 +112,10 @@ func TestSeparateIPsFailure(t *testing.T) {
 	}
 }
 
-func TestIsValidIDWithValidID(t *testing.T) {
-	ids := []string{"1", "311"}
-	for _, id := range ids {
-		result := isValidID(id)
-		assert.NoError(t, result)
-	}
-}
-
-func TestIsValidIDWithInvalidID(t *testing.T) {
-	type ID struct {
-		id             string
-		expectedResult string
-	}
-
-	ids := []ID{
-		{id: "a", expectedResult: "invalid uid/gid [a] specified"},
-		{id: "1*ab", expectedResult: "invalid uid/gid [1*ab] specified"},
-		{id: " 1", expectedResult: "invalid uid/gid [ 1] specified"},
-		{id: "-1", expectedResult: "invalid uid/gid [-1] specified"},
-		{id: "1.1", expectedResult: "invalid uid/gid [1.1] specified"},
-	}
-	for _, id := range ids {
-		result := isValidID(id.id)
-		assert.Equal(t, id.expectedResult, result.Error())
-	}
-}
-
 func TestIsValidPortWithValidPort(t *testing.T) {
 	ports := []string{"1337", "311"}
 	for _, port := range ports {
-		result := isValidID(port)
+		result := isValidPort(port)
 		assert.NoError(t, result)
 	}
 }
