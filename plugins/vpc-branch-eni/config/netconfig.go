@@ -155,15 +155,41 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		}
 	}
 
-	// Parse the optional gateway IP address.
-	if config.BranchGatewayIPAddress != "" {
-		netConfig.BranchGatewayIPAddress = net.ParseIP(config.BranchGatewayIPAddress)
-		if netConfig.BranchGatewayIPAddress == nil {
-			return nil, fmt.Errorf("invalid branchGatewayIPAddress %s", config.BranchGatewayIPAddress)
-		}
+	netConfig.BranchGatewayIPAddress, err = getGatewayIPAddress(netConfig.BranchIPAddress, config.BranchGatewayIPAddress)
+	if err != nil {
+		return nil, err
 	}
 
 	// Validation complete. Return the parsed NetConfig object.
 	log.Debugf("Created NetConfig: %+v", netConfig)
 	return &netConfig, nil
+}
+
+func getGatewayIPAddress(ipAddress *net.IPNet, gatewayIPAddressString string) (net.IP, error) {
+	var gatewayIPAddress net.IP
+	// If gateway IP address is provided, use it.
+	if gatewayIPAddressString != "" {
+		gatewayIPAddress = net.ParseIP(gatewayIPAddressString)
+		if gatewayIPAddress == nil {
+			return nil, fmt.Errorf("invalid branchGatewayIPAddress %s", gatewayIPAddressString)
+		}
+
+		return gatewayIPAddress, nil
+	}
+
+	// Else if neither gateway IP address nor ipAddress is provided, we cannot get a gateway IP address
+	// so just leave it as nil.
+	if ipAddress == nil {
+		return nil, nil
+	}
+
+	// Else, infer the gateway IP address from the subnet that ipAddress is in.
+	subnet, err := vpc.NewSubnet(vpc.GetSubnetPrefix(ipAddress))
+	if err != nil {
+		log.Errorf("Failed to parse VPC subnet for %s: %v.", ipAddress, err)
+		return nil, err
+	}
+
+	gatewayIPAddress = subnet.Gateways[0]
+	return gatewayIPAddress, nil
 }

@@ -16,6 +16,7 @@
 package config
 
 import (
+	"net"
 	"testing"
 
 	"github.com/containernetworking/cni/pkg/skel"
@@ -101,4 +102,26 @@ func TestPerContainerArgsOverrideNetConfig(t *testing.T) {
 	assert.Equal(t, 42, nc.BranchVlanID, "invalid vlanid")
 	assert.Equal(t, "44:44:44:55:55:55", nc.BranchMACAddress.String(), "invalid macaddress")
 	assert.Equal(t, "192.168.1.2/16", nc.BranchIPAddress.String(), "invalid ipaddress")
+}
+
+func TestGetGatewayIPAddress(t *testing.T) {
+	_, ipv4Net, err := net.ParseCIDR("172.31.16.3/20")
+	assert.NoError(t, err)
+
+	expectedGatewayIPAddress := net.ParseIP("172.31.16.2")
+
+	outputGatewayIPAddress, err := getGatewayIPAddress(ipv4Net, "172.31.16.2")
+	assert.NoError(t, err)
+	assert.Equal(t, expectedGatewayIPAddress, outputGatewayIPAddress)
+}
+
+func TestGetGatewayIPAddressFromSubnet(t *testing.T) {
+	_, ipv4Net, err := net.ParseCIDR("172.31.16.3/20")
+	assert.NoError(t, err)
+
+	expectedGatewayIPAddress := net.ParseIP("172.31.16.1")
+
+	outputGatewayIPAddress, err := getGatewayIPAddress(ipv4Net, "")
+	assert.NoError(t, err)
+	assert.Equal(t, expectedGatewayIPAddress, outputGatewayIPAddress)
 }
