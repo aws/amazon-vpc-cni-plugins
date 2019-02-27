@@ -107,7 +107,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		switch netConfig.InterfaceType {
 		case config.IfTypeVLAN:
 			// Container is running in a network namespace on this host.
-			err = plugin.createVLANLink(branch, args.IfName, netConfig.BranchIPAddress)
+			err = plugin.createVLANLink(branch, args.IfName, netConfig.BranchIPAddress, netConfig.BranchGatewayIPAddress)
 		case config.IfTypeTAP:
 			// Container is running in a VM.
 			// Connect the branch ENI to a TAP link in the target network namespace.
@@ -246,7 +246,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 }
 
 // createVLANLink creates a VLAN link in the target network namespace.
-func (plugin *Plugin) createVLANLink(branch *eni.Branch, linkName string, ipAddress *net.IPNet) error {
+func (plugin *Plugin) createVLANLink(branch *eni.Branch, linkName string, ipAddress *net.IPNet, gatewayIPAddress net.IP) error {
 	// Rename the branch link to the requested interface name.
 	log.Infof("Renaming branch link %v to %s.", branch, linkName)
 	err := branch.SetLinkName(linkName)
@@ -273,16 +273,9 @@ func (plugin *Plugin) createVLANLink(branch *eni.Branch, linkName string, ipAddr
 			return err
 		}
 
-		// Parse VPC subnet.
-		subnet, err := vpc.NewSubnet(vpc.GetSubnetPrefix(ipAddress))
-		if err != nil {
-			log.Errorf("Failed to parse VPC subnet for %s: %v.", ipAddress, err)
-			return err
-		}
-
 		// Add default route via branch link.
 		route := &netlink.Route{
-			Gw:        subnet.Gateways[0],
+			Gw:        gatewayIPAddress,
 			LinkIndex: branch.GetLinkIndex(),
 		}
 		log.Infof("Adding default IP route %+v.", route)
