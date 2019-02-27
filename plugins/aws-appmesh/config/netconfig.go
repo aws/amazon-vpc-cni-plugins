@@ -114,12 +114,6 @@ func validateConfig(config netConfigJSON) error {
 	}
 
 	// Validate the format of all fields.
-	if err := isValidID(config.IgnoredGID); err != nil {
-		return err
-	}
-	if err := isValidID(config.IgnoredUID); err != nil {
-		return err
-	}
 	if err := isValidPort(config.ProxyEgressPort); err != nil {
 		return err
 	}
@@ -165,20 +159,6 @@ func separateIPs(ignoredIPs []string) (string, string, error) {
 
 	}
 	return strings.Join(ipv4s, splitter), strings.Join(ipv6s, splitter), nil
-}
-
-// isValidID checks whether the id only has digits.
-func isValidID(id string) error {
-	if id == "" {
-		return nil
-	}
-
-	i, err := strconv.Atoi(id)
-	if err == nil && i > 0 {
-		return nil
-	}
-
-	return errors.Errorf("invalid uid/gid [%s] specified", id)
 }
 
 // isValidPort checks whether the port only has digits.
