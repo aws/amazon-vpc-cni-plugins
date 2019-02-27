@@ -42,7 +42,6 @@ LINKER_FLAGS = "\
 
 # Source files.
 COMMON_SOURCE_FILES = $(wildcard cni/*.go, logger/*.go, network/*.go, version/*.go)
-VPC_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-eni -type f)
 VPC_SHARED_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-shared-eni -type f)
 VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-eni -type f)
 VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-pat-eni -type f)
@@ -50,7 +49,6 @@ AWS_APPMESH_PLUGIN_SOURCE_FILES = $(shell find plugins/aws-appmesh -type f)
 ALL_SOURCE_FILES := $(shell find . -name '*.go')
 
 # Shorthand build targets.
-vpc-eni: $(BUILD_DIR)/vpc-eni
 vpc-shared-eni: $(BUILD_DIR)/vpc-shared-eni
 vpc-branch-eni: $(BUILD_DIR)/vpc-branch-eni
 vpc-branch-pat-eni: $(BUILD_DIR)/vpc-branch-pat-eni
@@ -58,19 +56,9 @@ aws-appmesh: $(BUILD_DIR)/aws-appmesh
 all-binaries: vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni aws-appmesh
 build: all-binaries unit-test
 
-# Build the vpc-eni CNI plugin.
-$(BUILD_DIR)/vpc-eni: $(VPC_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
-	go build \
-		-installsuffix cgo \
-		-v \
-		-a \
-		-ldflags $(LINKER_FLAGS) \
-		-o $(BUILD_DIR)/vpc-eni \
-		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-eni
-	@echo "Built vpc-eni plugin."
-
 # Build the vpc-shared-eni CNI plugin.
 $(BUILD_DIR)/vpc-shared-eni: $(VPC_SHARED_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
 	go build \
 		-installsuffix cgo \
 		-v \
@@ -82,6 +70,7 @@ $(BUILD_DIR)/vpc-shared-eni: $(VPC_SHARED_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOUR
 
 # Build the vpc-branch-eni CNI plugin.
 $(BUILD_DIR)/vpc-branch-eni: $(VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
 	go build \
 		-installsuffix cgo \
 		-v \
@@ -93,6 +82,7 @@ $(BUILD_DIR)/vpc-branch-eni: $(VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOUR
 
 # Build the vpc-branch-pat-eni CNI plugin.
 $(BUILD_DIR)/vpc-branch-pat-eni: $(VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
 	go build \
 		-installsuffix cgo \
 		-v \
@@ -104,6 +94,7 @@ $(BUILD_DIR)/vpc-branch-pat-eni: $(VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES) $(COM
 
 # Build the aws-appmesh CNI plugin.
 $(BUILD_DIR)/aws-appmesh: $(AWS_APPMESH_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
 	go build \
 		-installsuffix cgo \
 		-v \
