@@ -39,7 +39,6 @@ LINKER_FLAGS = "\
 		-X github.com/aws/amazon-vpc-cni-plugins/version.BuildTime=$(BUILD_TIMESTAMP) \
 		-s"
 
-
 # Source files.
 COMMON_SOURCE_FILES = $(wildcard cni/*.go, logger/*.go, network/*.go, version/*.go)
 VPC_SHARED_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-shared-eni -type f)
@@ -94,7 +93,7 @@ $(BUILD_DIR)/vpc-branch-pat-eni: $(VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES) $(COM
 
 # Build the aws-appmesh CNI plugin.
 $(BUILD_DIR)/aws-appmesh: $(AWS_APPMESH_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
+	GOOS=$(GOOS) CGO_ENABLED=$(CGO_ENABLED) \
 	go build \
 		-installsuffix cgo \
 		-v \
