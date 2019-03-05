@@ -69,7 +69,7 @@ $(BUILD_DIR)/vpc-shared-eni: $(VPC_SHARED_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOUR
 
 # Build the vpc-branch-eni CNI plugin.
 $(BUILD_DIR)/vpc-branch-eni: $(VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
+	GOOS=$(GOOS) CGO_ENABLED=$(CGO_ENABLED) \
 	go build \
 		-installsuffix cgo \
 		-v \
