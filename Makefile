@@ -93,7 +93,7 @@ $(BUILD_DIR)/vpc-branch-pat-eni: $(VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES) $(COM
 
 # Build the aws-appmesh CNI plugin.
 $(BUILD_DIR)/aws-appmesh: $(AWS_APPMESH_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
-	GOOS=$(GOOS) CGO_ENABLED=$(CGO_ENABLED) \
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
 	go build \
 		-installsuffix cgo \
 		-v \
