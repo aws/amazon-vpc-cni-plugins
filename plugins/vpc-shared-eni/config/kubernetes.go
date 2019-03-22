@@ -108,8 +108,8 @@ func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs) error {
 			return fmt.Errorf("failed to get pod %s: %v", kc.PodName, err)
 		}
 
-		podLabels := pod.GetLabels()
-		ipAddress, _ = podLabels[vpcResourceNameIPAddress]
+		podAnnotations := pod.GetAnnotations()
+		ipAddress, _ = podAnnotations[vpcResourceNameIPAddress]
 		if ipAddress != "" {
 			break
 		}
