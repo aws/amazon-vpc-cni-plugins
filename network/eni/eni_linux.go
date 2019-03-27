@@ -26,7 +26,7 @@ func (eni *ENI) SetLinkName(name string) error {
 	la := netlink.NewLinkAttrs()
 	la.Name = eni.linkName
 	link := &netlink.Dummy{LinkAttrs: la}
-	err := netlink.LinkSetName(link, name)
+	err := eni.netLinkWrapper.LinkSetName(link, name)
 
 	if err != nil {
 		return err
@@ -42,7 +42,7 @@ func (eni *ENI) SetLinkMTU(mtu uint) error {
 	la := netlink.NewLinkAttrs()
 	la.Name = eni.linkName
 	link := &netlink.Dummy{LinkAttrs: la}
-	return netlink.LinkSetMTU(link, int(mtu))
+	return eni.netLinkWrapper.LinkSetMTU(link, int(mtu))
 }
 
 // SetOpState sets the operational state of the ENI.
@@ -54,9 +54,9 @@ func (eni *ENI) SetOpState(up bool) error {
 	link := &netlink.Dummy{LinkAttrs: la}
 
 	if up {
-		err = netlink.LinkSetUp(link)
+		err = eni.netLinkWrapper.LinkSetUp(link)
 	} else {
-		err = netlink.LinkSetDown(link)
+		err = eni.netLinkWrapper.LinkSetDown(link)
 	}
 
 	return err
@@ -67,7 +67,7 @@ func (eni *ENI) SetNetNS(ns netns.NetNS) error {
 	la := netlink.NewLinkAttrs()
 	la.Name = eni.linkName
 	link := &netlink.Dummy{LinkAttrs: la}
-	return netlink.LinkSetNsFd(link, int(ns.GetFd()))
+	return eni.netLinkWrapper.LinkSetNsFd(link, int(ns.GetFd()))
 }
 
 // SetMACAddress sets the MAC address of the ENI.
@@ -76,7 +76,7 @@ func (eni *ENI) SetMACAddress(address net.HardwareAddr) error {
 	la.Name = eni.linkName
 	link := &netlink.Dummy{LinkAttrs: la}
 
-	err := netlink.LinkSetHardwareAddr(link, address)
+	err := eni.netLinkWrapper.LinkSetHardwareAddr(link, address)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func (eni *ENI) SetIPAddress(address *net.IPNet) error {
 	link := &netlink.Dummy{LinkAttrs: la}
 	addr := &netlink.Addr{IPNet: address}
 
-	err := netlink.AddrAdd(link, addr)
+	err := eni.netLinkWrapper.AddrAdd(link, addr)
 	if err != nil {
 		return err
 	}

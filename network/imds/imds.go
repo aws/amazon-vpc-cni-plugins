@@ -17,6 +17,7 @@ import (
 	"net"
 	"syscall"
 
+	"github.com/aws/amazon-vpc-cni-plugins/network/netlinkwrapper"
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
 	log "github.com/cihub/seelog"
@@ -24,7 +25,7 @@ import (
 )
 
 // BlockInstanceMetadataEndpoint adds a blackhole rule for IMDS endpoint.
-func BlockInstanceMetadataEndpoint() error {
+func BlockInstanceMetadataEndpoint(netLink netlinkwrapper.NetLink) error {
 	log.Infof("Adding route to block instance metadata endpoint %s", vpc.InstanceMetadataEndpoint)
 	_, imdsNetwork, err := net.ParseCIDR(vpc.InstanceMetadataEndpoint)
 	if err != nil {
@@ -34,7 +35,7 @@ func BlockInstanceMetadataEndpoint() error {
 		return err
 	}
 
-	err = netlink.RouteAdd(&netlink.Route{
+	err = netLink.RouteAdd(&netlink.Route{
 		Dst:  imdsNetwork,
 		Type: syscall.RTN_BLACKHOLE,
 	})

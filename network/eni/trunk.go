@@ -64,3 +64,26 @@ func NewTrunk(linkName string, macAddress net.HardwareAddr, isolationMode Isolat
 
 	return trunk, nil
 }
+
+// NewTrunkWithENI creates a new Trunk object with given ENI object. This is used in testing.
+func NewTrunkWithENI(eni *ENI, isolationMode IsolationMode) (*Trunk, error) {
+	// Trunk ENI specific validations.
+	if isolationMode != TrunkIsolationModeVLAN {
+		log.Errorf("Invalid isolation mode: %v", isolationMode)
+		return nil, fmt.Errorf("invalid isolation mode")
+	}
+
+	trunk := &Trunk{
+		ENI:           *eni,
+		isolationMode: isolationMode,
+	}
+
+	// Trunk interfaces start attached.
+	err := trunk.AttachToLink()
+	if err != nil {
+		log.Errorf("Failed to find trunk interface %s: %v", &trunk.ENI, err)
+		return nil, err
+	}
+
+	return trunk, nil
+}

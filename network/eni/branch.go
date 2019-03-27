@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/aws/amazon-vpc-cni-plugins/network/netlinkwrapper"
+	"github.com/aws/amazon-vpc-cni-plugins/network/netwrapper"
 	log "github.com/cihub/seelog"
 	"github.com/vishvananda/netlink"
 )
@@ -42,9 +44,30 @@ func NewBranch(trunk *Trunk, linkName string, macAddress net.HardwareAddr, isola
 
 	branch := &Branch{
 		ENI: ENI{
-			linkName:   linkName,
-			macAddress: macAddress,
+			linkName:       linkName,
+			macAddress:     macAddress,
+			netLinkWrapper: netlinkwrapper.NewNetLink(),
+			netWrapper:     netwrapper.NewNet(),
 		},
+		isolationID: isolationID,
+		trunk:       trunk,
+	}
+
+	return branch, nil
+}
+
+// NewBranchWithENI creates a new Branch object with given ENI and Trunk objects. This is used in testing.
+func NewBranchWithENI(eni *ENI, trunk *Trunk, isolationID int) (*Branch, error) {
+	if trunk == nil {
+		return nil, fmt.Errorf("Invalid trunk")
+	}
+
+	if isolationID == 0 {
+		return nil, fmt.Errorf("Invalid isolationID")
+	}
+
+	branch := &Branch{
+		ENI:         *eni,
 		isolationID: isolationID,
 		trunk:       trunk,
 	}
@@ -61,7 +84,7 @@ func (branch *Branch) AttachToLink(setMACAddress bool) error {
 	vlanLink := &netlink.Vlan{LinkAttrs: la, VlanId: branch.isolationID}
 
 	log.Infof("Creating vlan link for branch [%s]: %+v", branch.linkName, vlanLink)
-	if err := netlink.LinkAdd(vlanLink); err != nil {
+	if err := branch.netLinkWrapper.LinkAdd(vlanLink); err != nil {
 		log.Errorf("Failed to add vlan link for branch [%s]: %v", branch.linkName, err)
 		return err
 	}
@@ -69,7 +92,7 @@ func (branch *Branch) AttachToLink(setMACAddress bool) error {
 	branch.linkIndex = vlanLink.Index
 	if setMACAddress && branch.macAddress != nil {
 		// Set VLAN link MAC address to customer branch ENI MAC address.
-		if err := netlink.LinkSetHardwareAddr(vlanLink, branch.macAddress); err != nil {
+		if err := branch.netLinkWrapper.LinkSetHardwareAddr(vlanLink, branch.macAddress); err != nil {
 			log.Errorf("Failed to set MAC address for branch [%s] %v: %v",
 				branch.linkName, branch.macAddress, err)
 			return err
@@ -91,7 +114,7 @@ func (branch *Branch) DetachFromLink() error {
 	vlanLink := &netlink.Vlan{LinkAttrs: la, VlanId: branch.isolationID}
 
 	log.Infof("Deleting vlan link for branch [%s]: %+v", branch.linkName, vlanLink)
-	err := netlink.LinkDel(vlanLink)
+	err := branch.netLinkWrapper.LinkDel(vlanLink)
 	if err != nil {
 		log.Errorf("Failed to delete vlan link for branch [%s]: %v", branch.linkName, err)
 		return err
