@@ -26,3 +26,10 @@ type NetNS interface {
 	// Run runs the given function in the underlying netns.
 	Run(toRun func() error) error
 }
+
+// NetNSProvider wraps the methods to get network namespace.
+type NetNSProvider interface {
+	GetNetNS(nameOrPath string) (NetNS, error)
+	GetNetNSByName(name string) (NetNS, error)
+	GetNetNSByPath(path string) (NetNS, error)
+}
