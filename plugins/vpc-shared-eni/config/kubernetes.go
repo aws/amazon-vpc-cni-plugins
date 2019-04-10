@@ -16,6 +16,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
@@ -46,6 +47,9 @@ type KubernetesConfig struct {
 }
 
 const (
+	// namespacePlaceholder is the placeholder string to be replaced with the actual namespace.
+	namespacePlaceholder = "{%namespace%}"
+
 	// vpcResourceNameIPAddress is the extended resource name for VPC private IP addresses.
 	vpcResourceNameIPAddress = "vpc.amazonaws.com/PrivateIPv4Address"
 
@@ -82,6 +86,11 @@ func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs) error {
 
 	if kc.Namespace == "" || kc.PodName == "" {
 		return fmt.Errorf("missing required args %v", kc)
+	}
+
+	// Insert the actual namespace of the pod to the DNS suffix search list.
+	for i, suffix := range netConfig.DNS.Search {
+		netConfig.DNS.Search[i] = strings.Replace(suffix, namespacePlaceholder, kc.Namespace, 1)
 	}
 
 	// Retrieve the IP address configuration from pod.

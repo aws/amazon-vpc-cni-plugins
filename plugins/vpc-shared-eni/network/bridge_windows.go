@@ -162,7 +162,7 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	hnsEndpoint = &hcsshim.HNSEndpoint{
 		Name:               endpointName,
 		VirtualNetworkName: nb.generateHNSNetworkName(nw),
-		DNSSuffix:          nw.DNSSuffix,
+		DNSSuffix:          strings.Join(nw.DNSSuffixSearchList, ","),
 		DNSServerList:      strings.Join(nw.DNSServers, ","),
 	}
 

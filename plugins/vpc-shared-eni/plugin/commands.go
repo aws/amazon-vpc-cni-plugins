@@ -55,15 +55,15 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 	// Find or create the container network for the shared ENI.
 	nw := network.Network{
-		Name:             netConfig.Name,
-		BridgeNetNSPath:  netConfig.BridgeNetNSPath,
-		SharedENI:        sharedENI,
-		ENIIPAddress:     netConfig.ENIIPAddress,
-		GatewayIPAddress: netConfig.GatewayIPAddress,
-		VPCCIDRs:         netConfig.VPCCIDRs,
-		DNSServers:       netConfig.DNS.Nameservers,
-		DNSSuffix:        netConfig.DNS.Domain,
-		ServiceCIDR:      netConfig.Kubernetes.ServiceCIDR,
+		Name:                netConfig.Name,
+		BridgeNetNSPath:     netConfig.BridgeNetNSPath,
+		SharedENI:           sharedENI,
+		ENIIPAddress:        netConfig.ENIIPAddress,
+		GatewayIPAddress:    netConfig.GatewayIPAddress,
+		VPCCIDRs:            netConfig.VPCCIDRs,
+		DNSServers:          netConfig.DNS.Nameservers,
+		DNSSuffixSearchList: netConfig.DNS.Search,
+		ServiceCIDR:         netConfig.Kubernetes.ServiceCIDR,
 	}
 
 	err = nb.FindOrCreateNetwork(&nw)
