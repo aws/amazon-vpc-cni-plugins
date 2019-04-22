@@ -78,9 +78,9 @@ func TestAddDel(t *testing.T) {
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	// Configure the env var to use the test logs directory.
-	os.Setenv("CNI_LOG_FILE", fmt.Sprintf("%s/aws-appmesh.log", testLogDir))
+	os.Setenv("VPC_CNI_LOG_FILE", fmt.Sprintf("%s/aws-appmesh.log", testLogDir))
 	t.Logf("Using %s for test logs", testLogDir)
-	defer os.Unsetenv("CNI_LOG_FILE")
+	defer os.Unsetenv("VPC_CNI_LOG_FILE")
 
 	// Handle deletion of test logs at the end of the test execution if specified.
 	ok, err := strconv.ParseBool(getEnvOrDefault("ECS_PRESERVE_E2E_TEST_LOGS", "false"))
@@ -146,8 +146,8 @@ func TestAddReturnError(t *testing.T) {
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	// Configure the env var to use the test logs directory.
-	os.Setenv("CNI_LOG_FILE", fmt.Sprintf("%s/aws-appmesh.log", testLogDir))
-	defer os.Unsetenv("CNI_LOG_FILE")
+	os.Setenv("VPC_CNI_LOG_FILE", fmt.Sprintf("%s/aws-appmesh.log", testLogDir))
+	defer os.Unsetenv("VPC_CNI_LOG_FILE")
 
 	// Handle deletion of test logs at the end of the test execution if specified.
 	ok, err := strconv.ParseBool(getEnvOrDefault("ECS_PRESERVE_E2E_TEST_LOGS", "false"))
