@@ -95,6 +95,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		NetConf:         config.NetConf,
 		ENIName:         config.ENIName,
 		BridgeNetNSPath: config.BridgeNetNSPath,
+		InterfaceType:   config.InterfaceType,
 		Kubernetes: KubernetesConfig{
 			ServiceCIDR: config.ServiceCIDR,
 		},
@@ -141,6 +142,11 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		if netConfig.GatewayIPAddress == nil {
 			return nil, fmt.Errorf("invalid GatewayIPAddress %s", config.GatewayIPAddress)
 		}
+	}
+
+	// Parse the interface type.
+	if config.InterfaceType != IfTypeVETH && config.InterfaceType != IfTypeTAP {
+		return nil, fmt.Errorf("invalid InterfaceType %s", config.InterfaceType)
 	}
 
 	// Parse the optional TAP user ID.
