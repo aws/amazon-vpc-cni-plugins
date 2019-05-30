@@ -58,6 +58,14 @@ func (branch *Branch) AttachToLink(setMACAddress bool) error {
 	la := netlink.NewLinkAttrs()
 	la.Name = branch.linkName
 	la.ParentIndex = branch.trunk.linkIndex
+	if setMACAddress && branch.macAddress != nil {
+		// Set VLAN link MAC address to customer branch ENI MAC address.
+		la.HardwareAddr = branch.macAddress
+	} else {
+		log.Debugf("Skip setting hardware address for branch [%s] overrideMAC: %t",
+			branch.linkName, setMACAddress)
+	}
+
 	vlanLink := &netlink.Vlan{LinkAttrs: la, VlanId: branch.isolationID}
 
 	log.Infof("Creating vlan link for branch [%s]: %+v", branch.linkName, vlanLink)
@@ -67,18 +75,6 @@ func (branch *Branch) AttachToLink(setMACAddress bool) error {
 	}
 
 	branch.linkIndex = vlanLink.Index
-	if setMACAddress && branch.macAddress != nil {
-		// Set VLAN link MAC address to customer branch ENI MAC address.
-		if err := netlink.LinkSetHardwareAddr(vlanLink, branch.macAddress); err != nil {
-			log.Errorf("Failed to set MAC address for branch [%s] %v: %v",
-				branch.linkName, branch.macAddress, err)
-			return err
-		}
-		return nil
-	}
-
-	log.Debugf("Skip setting hardware address for branch [%s] overrideMAC: %t",
-		branch.linkName, setMACAddress)
 	return nil
 }
 
