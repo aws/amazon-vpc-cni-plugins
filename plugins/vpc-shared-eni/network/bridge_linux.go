@@ -229,7 +229,26 @@ func (nb *BridgeBuilder) createBridge(
 		return 0, err
 	}
 
-	// Remove IP address from ENI link.
+	// If anything fails during setup, clean up the bridge so that the next call starts clean.
+	defer func() {
+		if err != nil {
+			log.Infof("Deleting bridge link %+v.", bridgeLink)
+			cleanupErr := netlink.LinkDel(bridgeLink)
+			if cleanupErr != nil {
+				log.Errorf("Failed to delete bridge %s: %v.", bridgeName, cleanupErr)
+			}
+		}
+	}()
+
+	// Set bridge link MTU.
+	log.Infof("Setting bridge link %s MTU to %d octets.", bridgeName, vpc.JumboFrameMTU)
+	err = netlink.LinkSetMTU(bridgeLink, vpc.JumboFrameMTU)
+	if err != nil {
+		log.Errorf("Failed to set bridge link MTU: %v.", err)
+		return 0, err
+	}
+
+	// Remove IP address from shared ENI link.
 	log.Infof("Removing IP address %v from ENI link %s.", ipAddress, sharedENI)
 	la = netlink.NewLinkAttrs()
 	la.Name = sharedENI.GetLinkName()
@@ -279,14 +298,6 @@ func (nb *BridgeBuilder) createBridge(
 
 	if err != nil {
 		log.Errorf("Failed to append SNAT rule for ENI link %s: %v.", sharedENI, err)
-		return 0, err
-	}
-
-	// Set bridge link MTU.
-	log.Infof("Setting bridge link %s MTU to %d octets.", bridgeName, vpc.JumboFrameMTU)
-	err = netlink.LinkSetMTU(bridgeLink, vpc.JumboFrameMTU)
-	if err != nil {
-		log.Errorf("Failed to set bridge link MTU: %v.", err)
 		return 0, err
 	}
 
@@ -510,7 +521,7 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 	case config.IfTypeVETH:
 		err = nb.setupVethLink(vethPeerName, ifName, ipAddress, gatewayIPAddress)
 	case config.IfTypeTAP:
-		err = nb.createTAPLink(vethPeerName, ifName, tapUserID)
+		err = nb.setupTapLink(vethPeerName, ifName, tapUserID)
 	}
 
 	if err != nil {
@@ -552,7 +563,7 @@ func (nb *BridgeBuilder) setupVethLink(
 		return err
 	}
 
-	// Set the ENI IP address and the default gateway if specified.
+	// Set the IP address and the default gateway if specified.
 	if ipAddress != nil {
 		// Assign the IP address.
 		log.Infof("Assigning IP address %v to link %s.", ipAddress, ifName)
@@ -583,9 +594,10 @@ func (nb *BridgeBuilder) setupVethLink(
 
 		// Add default route to the specified gateway via ENI.
 		route := &netlink.Route{
-			Gw:        gatewayIPAddress,
 			LinkIndex: iface.Index,
+			Gw:        gatewayIPAddress,
 		}
+
 		log.Infof("Adding default IP route %+v.", route)
 		err = netlink.RouteAdd(route)
 		if err != nil {
@@ -597,8 +609,8 @@ func (nb *BridgeBuilder) setupVethLink(
 	return nil
 }
 
-// createTAPLink creates a TAP link in the target network namespace.
-func (nb *BridgeBuilder) createTAPLink(linkName string, tapLinkName string, uid int) error {
+// setupTapLink sets up a TAP link in the target network namespace.
+func (nb *BridgeBuilder) setupTapLink(linkName string, tapLinkName string, uid int) error {
 	// Create the bridge link.
 	la := netlink.NewLinkAttrs()
 	la.Name = tapBridgeName
