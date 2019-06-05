@@ -32,7 +32,8 @@ endif
 # Build version.
 BUILD_VERSION ?= $(shell echo $(GIT_TAG) | sed 's/^v\([0-9]\)/\1/')
 BUILD_TIMESTAMP = $(shell date --iso-8601=seconds)
-BUILD_RELEASE_FLAGS = "-a"
+BUILD_RELEASE_FLAGS = -a
+BUILD_FLAGS ?= $(BUILD_RELEASE_FLAGS)
 LINKER_FLAGS = "\
 		-X github.com/aws/amazon-vpc-cni-plugins/version.Version=$(BUILD_VERSION) \
 		-X github.com/aws/amazon-vpc-cni-plugins/version.GitShortHash=$(GIT_SHORT_HASH) \
@@ -61,7 +62,7 @@ $(BUILD_DIR)/vpc-shared-eni: $(VPC_SHARED_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOUR
 	go build \
 		-installsuffix cgo \
 		-v \
-		-a \
+		$(BUILD_FLAGS) \
 		-ldflags $(LINKER_FLAGS) \
 		-o $(BUILD_DIR)/vpc-shared-eni \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni
@@ -73,7 +74,7 @@ $(BUILD_DIR)/vpc-branch-eni: $(VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOUR
 	go build \
 		-installsuffix cgo \
 		-v \
-		-a \
+		$(BUILD_FLAGS) \
 		-ldflags $(LINKER_FLAGS) \
 		-o $(BUILD_DIR)/vpc-branch-eni \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-branch-eni
@@ -85,7 +86,7 @@ $(BUILD_DIR)/vpc-branch-pat-eni: $(VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES) $(COM
 	go build \
 		-installsuffix cgo \
 		-v \
-		-a \
+		$(BUILD_FLAGS) \
 		-ldflags $(LINKER_FLAGS) \
 		-o $(BUILD_DIR)/vpc-branch-pat-eni \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-branch-pat-eni
@@ -97,7 +98,7 @@ $(BUILD_DIR)/aws-appmesh: $(AWS_APPMESH_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FIL
 	go build \
 		-installsuffix cgo \
 		-v \
-		-a \
+		$(BUILD_FLAGS) \
 		-ldflags $(LINKER_FLAGS) \
 		-o $(BUILD_DIR)/aws-appmesh \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh
