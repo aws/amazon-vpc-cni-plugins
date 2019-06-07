@@ -16,6 +16,7 @@ package network
 import (
 	"fmt"
 	"net"
+	"os"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/ebtables"
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
@@ -31,6 +32,9 @@ import (
 const (
 	// bridgeNameFormat is the format used for generating bridge names (e.g. "vpcbr1").
 	bridgeNameFormat = "%sbr%d"
+
+	// dummyNameFormat is the format used for generating dummy link names for a bridge.
+	dummyNameFormat = "%sdummy"
 
 	// vethLinkNameFormat is the format used for generating veth link names.
 	vethLinkNameFormat = "veth%s"
@@ -233,10 +237,10 @@ func (nb *BridgeBuilder) createBridge(
 	// If anything fails during setup, clean up the bridge so that the next call starts clean.
 	defer func() {
 		if err != nil {
-			log.Infof("Deleting bridge link %+v.", bridgeLink)
-			cleanupErr := netlink.LinkDel(bridgeLink)
+			log.Infof("Cleaning up bridge on error: %v.", err)
+			cleanupErr := nb.deleteBridge(bridgeName, sharedENI)
 			if cleanupErr != nil {
-				log.Errorf("Failed to delete bridge %s: %v.", bridgeName, cleanupErr)
+				log.Errorf("Failed to cleanup bridge: %v.", cleanupErr)
 			}
 		}
 	}()
@@ -246,6 +250,34 @@ func (nb *BridgeBuilder) createBridge(
 	err = netlink.LinkSetMTU(bridgeLink, vpc.JumboFrameMTU)
 	if err != nil {
 		log.Errorf("Failed to set bridge link MTU: %v.", err)
+		return 0, err
+	}
+
+	// Connect a dummy link to the bridge.
+	dummyName := fmt.Sprintf(dummyNameFormat, bridgeName)
+	la = netlink.NewLinkAttrs()
+	la.Name = dummyName
+	la.MasterIndex = bridgeLink.Attrs().Index
+	dummyLink := &netlink.Dummy{LinkAttrs: la}
+	log.Infof("Creating dummy link %+v.", dummyLink)
+	err = netlink.LinkAdd(dummyLink)
+	if err != nil {
+		log.Errorf("Failed to create dummy link: %v.", err)
+		return 0, err
+	}
+
+	// Set bridge MAC address to dummy's MAC address.
+	// Bridge by default inherits the smallest of the MAC addresses of interfaces connected to its
+	// ports. Explicitly setting a static address prevents the bridge from dynamically changing its
+	// address as interfaces join and leave the bridge.
+	link, err := netlink.LinkByName(dummyName)
+	if err != nil {
+		log.Errorf("Failed to query dummy link: %v.", err)
+		return 0, err
+	}
+	err = netlink.LinkSetHardwareAddr(bridgeLink, link.Attrs().HardwareAddr)
+	if err != nil {
+		log.Errorf("Failed to set bridge link MAC address: %v.", err)
 		return 0, err
 	}
 
@@ -397,7 +429,7 @@ func (nb *BridgeBuilder) deleteBridge(
 		},
 	)
 
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		log.Errorf("Failed to delete DNAT rule for ENI link %s: %v.", sharedENI, err)
 		return err
 	}
@@ -416,18 +448,29 @@ func (nb *BridgeBuilder) deleteBridge(
 		},
 	)
 
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		log.Errorf("Failed to delete SNAT rule for ENI link %s: %v.", sharedENI, err)
 		return err
 	}
 
-	// Delete the bridge.
+	// Delete the dummy link for the bridge.
 	la := netlink.NewLinkAttrs()
+	la.Name = fmt.Sprintf(dummyNameFormat, bridgeName)
+	dummyLink := &netlink.Dummy{LinkAttrs: la}
+	log.Infof("Deleting dummy link %+v.", dummyLink)
+	err = netlink.LinkDel(dummyLink)
+	if err != nil && !os.IsNotExist(err) {
+		log.Errorf("Failed to delete dummy link: %v.", err)
+		return err
+	}
+
+	// Delete the bridge.
+	la = netlink.NewLinkAttrs()
 	la.Name = bridgeName
 	bridgeLink := &netlink.Bridge{LinkAttrs: la}
 	log.Infof("Deleting bridge link %+v.", bridgeLink)
 	err = netlink.LinkDel(bridgeLink)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		log.Errorf("Failed to delete bridge %s: %v.", bridgeName, err)
 		return err
 	}
