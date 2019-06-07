@@ -120,7 +120,8 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	// Setup the target network namespace.
 	err = targetNetNS.Run(func() error {
 		ep.MACAddress, err = nb.setupTargetNetNS(
-			vethPeerName, ep.IfType, ep.TapUserID, ep.IfName, ep.IPAddress, nw.GatewayIPAddress)
+			vethPeerName, ep.IfType, ep.TapUserID, ep.IfName, ep.IPAddress,
+			nw.GatewayIPAddress, nil)
 		return err
 	})
 	if err != nil {
@@ -508,7 +509,8 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 	tapUserID int,
 	ifName string,
 	ipAddress *net.IPNet,
-	gatewayIPAddress net.IP) (net.HardwareAddr, error) {
+	gatewayIPAddress net.IP,
+	gatewayMACAddress net.HardwareAddr) (net.HardwareAddr, error) {
 
 	// Check if the container interface already exists.
 	link, err := netlink.LinkByName(ifName)
@@ -519,7 +521,7 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 
 	switch ifType {
 	case config.IfTypeVETH:
-		err = nb.setupVethLink(vethPeerName, ifName, ipAddress, gatewayIPAddress)
+		err = nb.setupVethLink(vethPeerName, ifName, ipAddress, gatewayIPAddress, gatewayMACAddress)
 	case config.IfTypeTAP:
 		err = nb.setupTapLink(vethPeerName, ifName, tapUserID)
 	}
@@ -538,7 +540,8 @@ func (nb *BridgeBuilder) setupVethLink(
 	vethPeerName string,
 	ifName string,
 	ipAddress *net.IPNet,
-	gatewayIPAddress net.IP) error {
+	gatewayIPAddress net.IP,
+	gatewayMACAddress net.HardwareAddr) error {
 
 	var link netlink.Link
 
@@ -596,6 +599,7 @@ func (nb *BridgeBuilder) setupVethLink(
 		route := &netlink.Route{
 			LinkIndex: iface.Index,
 			Gw:        gatewayIPAddress,
+			Flags:     int(netlink.FLAG_ONLINK),
 		}
 
 		log.Infof("Adding default IP route %+v.", route)
@@ -603,6 +607,24 @@ func (nb *BridgeBuilder) setupVethLink(
 		if err != nil {
 			log.Errorf("Failed to add IP route %+v: %v.", route, err)
 			return err
+		}
+
+		// Add the neighbor entry for the gateway if a MAC address is specified.
+		if gatewayMACAddress != nil {
+			neigh := &netlink.Neigh{
+				LinkIndex:    iface.Index,
+				Family:       netlink.FAMILY_V4,
+				State:        netlink.NUD_PERMANENT,
+				IP:           gatewayIPAddress,
+				HardwareAddr: gatewayMACAddress,
+			}
+
+			log.Infof("Adding neighbor entry for gateway %+v.", neigh)
+			err = netlink.NeighAdd(neigh)
+			if err != nil {
+				log.Errorf("Failed to add neighbor %+v: %v.", neigh, err)
+				return err
+			}
 		}
 	}
 
