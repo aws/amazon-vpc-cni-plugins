@@ -114,17 +114,13 @@ func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs) error {
 			break
 		}
 
-		log.Info("Waiting for pod label %s.", vpcResourceNameIPAddress)
+		log.Infof("Waiting for pod label %s.", vpcResourceNameIPAddress)
 		time.Sleep(retryDelay)
 	}
 
 	if ipAddress == "" {
 		return fmt.Errorf("pod does not have label %s", vpcResourceNameIPAddress)
 	}
-
-	// Get the subnet prefix length from ENI IP address.
-	prefixLength, _ := netConfig.ENIIPAddress.Mask.Size()
-	ipAddress = fmt.Sprintf("%s/%d", ipAddress, prefixLength)
 
 	netConfig.IPAddress, err = vpc.GetIPAddressFromString(ipAddress)
 	if err != nil {
