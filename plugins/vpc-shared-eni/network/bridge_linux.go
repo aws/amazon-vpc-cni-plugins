@@ -73,12 +73,14 @@ func (nb *BridgeBuilder) FindOrCreateNetwork(nw *Network) error {
 
 		// Connect the ENI to a bridge in the bridge network namespace.
 		err = bridgeNetNS.Run(func() error {
-			nw.BridgeIndex, err = nb.createBridge(bridgeName, nw.SharedENI, nw.ENIIPAddress)
+			nw.BridgeIndex, err = nb.createBridge(
+				bridgeName, nw.BridgeType, nw.SharedENI, nw.ENIIPAddress)
 			return err
 		})
 	} else {
 		// Connect the ENI to a bridge.
-		nw.BridgeIndex, err = nb.createBridge(bridgeName, nw.SharedENI, nw.ENIIPAddress)
+		nw.BridgeIndex, err = nb.createBridge(
+			bridgeName, nw.BridgeType, nw.SharedENI, nw.ENIIPAddress)
 	}
 
 	if err != nil {
@@ -91,7 +93,8 @@ func (nb *BridgeBuilder) FindOrCreateNetwork(nw *Network) error {
 // DeleteNetwork deletes a container network.
 func (nb *BridgeBuilder) DeleteNetwork(nw *Network) error {
 	bridgeName := fmt.Sprintf(bridgeNameFormat, nw.Name, nw.SharedENI.GetLinkIndex())
-	err := nb.deleteBridge(bridgeName, nw.SharedENI)
+
+	err := nb.deleteBridge(bridgeName, nw.BridgeType, nw.SharedENI)
 
 	if err != nil {
 		log.Errorf("Failed to delete bridge: %v.", err)
@@ -103,7 +106,7 @@ func (nb *BridgeBuilder) DeleteNetwork(nw *Network) error {
 // FindOrCreateEndpoint connects the ENI to target network namespace using veth pairs.
 func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	// Derive endpoint names.
-	vethLinkName := fmt.Sprintf(vethLinkNameFormat, ep.ContainerID)
+	vethLinkName := fmt.Sprintf(vethLinkNameFormat, ep.ContainerID[:8])
 	vethPeerName := vethLinkName + "-2"
 
 	// Find the target network namespace.
@@ -121,11 +124,58 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 		return err
 	}
 
+	gatewayIPAddress := nw.GatewayIPAddress
+	var gatewayMACAddress net.HardwareAddr
+
+	// Check whether the endpoint is in the same subnet as the ENI.
+	epSubnetPrefix := vpc.GetSubnetPrefix(ep.IPAddress)
+	eniSubnetPrefix := vpc.GetSubnetPrefix(nw.ENIIPAddress)
+	sameSubnet := (epSubnetPrefix.String() == eniSubnetPrefix.String())
+
+	if nw.BridgeType == config.BridgeTypeL3 || !sameSubnet {
+		// Route ingress traffic for the endpoint to the bridge.
+		route := &netlink.Route{
+			LinkIndex: nw.BridgeIndex,
+			Scope:     netlink.SCOPE_LINK,
+		}
+
+		// If it is in the same subnet, the IP address must have been allocated from a VPC subnet,
+		// so restrict the route to this IP address only. Otherwise, the IP address is from a CIDR
+		// block delegated to this instance, so add a single route for the entire CIDR block.
+		if sameSubnet {
+			dst := *ep.IPAddress
+			_, maskSize := dst.Mask.Size()
+			dst.Mask = net.CIDRMask(maskSize, maskSize)
+			route.Dst = &dst
+		} else {
+			route.Dst = epSubnetPrefix
+		}
+
+		log.Infof("Adding IP route %+v to bridge.", route)
+		err = netlink.RouteAdd(route)
+		if err != nil && !os.IsExist(err) {
+			log.Errorf("Failed to add IP route %+v: %v.", route, err)
+			return err
+		}
+
+		// Configure the endpoint to use the ENI subnet's default gateway.
+		if gatewayIPAddress == nil {
+			subnet, _ := vpc.NewSubnet(eniSubnetPrefix)
+			gatewayIPAddress = subnet.Gateways[0]
+		}
+
+		// Configure the endpoint to relay the default gateway traffic to the on-link bridge.
+		link, err := netlink.LinkByIndex(nw.BridgeIndex)
+		if err == nil {
+			gatewayMACAddress = link.Attrs().HardwareAddr
+		}
+	}
+
 	// Setup the target network namespace.
 	err = targetNetNS.Run(func() error {
 		ep.MACAddress, err = nb.setupTargetNetNS(
 			vethPeerName, ep.IfType, ep.TapUserID, ep.IfName, ep.IPAddress,
-			nw.GatewayIPAddress, nil)
+			gatewayIPAddress, gatewayMACAddress)
 		return err
 	})
 	if err != nil {
@@ -133,24 +183,27 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 		return err
 	}
 
-	// Set MAC DNAT rule for IP datagrams sent to the endpoint IP address to endpoint MAC address.
-	err = ebtables.NAT.Append(
-		ebtables.PreRouting,
-		&ebtables.Rule{
-			Protocol: "IPv4",
-			In:       nw.SharedENI.GetLinkName(),
-			Match: &ebtables.IPv4Match{
-				Dst: ep.IPAddress.IP,
+	if nw.BridgeType == config.BridgeTypeL2 {
+		// Set MAC DNAT rule for translating ingress IP datagrams arriving on the shared ENI
+		// sent to the endpoint IP address to endpoint MAC address.
+		err = ebtables.NAT.Append(
+			ebtables.PreRouting,
+			&ebtables.Rule{
+				Protocol: "IPv4",
+				In:       nw.SharedENI.GetLinkName(),
+				Match: &ebtables.IPv4Match{
+					Dst: ep.IPAddress.IP,
+				},
+				Target: &ebtables.DNATTarget{
+					ToDst:  ep.MACAddress,
+					Target: ebtables.Accept,
+				},
 			},
-			Target: &ebtables.DNATTarget{
-				ToDst:  ep.MACAddress,
-				Target: ebtables.Accept,
-			},
-		},
-	)
+		)
 
-	if err != nil {
-		log.Errorf("Failed to append DNAT rule for veth link %s: %v.", vethLinkName, err)
+		if err != nil {
+			log.Errorf("Failed to append DNAT rule for veth link %s: %v.", vethLinkName, err)
+		}
 	}
 
 	return nil
@@ -185,25 +238,45 @@ func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
 		returnedErr = err
 	}
 
-	// Delete the MAC DNAT rule for the endpoint.
-	err = ebtables.NAT.Delete(
-		ebtables.PreRouting,
-		&ebtables.Rule{
-			Protocol: "IPv4",
-			In:       nw.SharedENI.GetLinkName(),
-			Match: &ebtables.IPv4Match{
-				Dst: ep.IPAddress.IP,
+	// Delete bridge layer2 configuration.
+	if nw.BridgeType == config.BridgeTypeL2 {
+		// Delete the MAC DNAT rule for the endpoint.
+		err = ebtables.NAT.Delete(
+			ebtables.PreRouting,
+			&ebtables.Rule{
+				Protocol: "IPv4",
+				In:       nw.SharedENI.GetLinkName(),
+				Match: &ebtables.IPv4Match{
+					Dst: ep.IPAddress.IP,
+				},
+				Target: &ebtables.DNATTarget{
+					ToDst:  ep.MACAddress,
+					Target: ebtables.Accept,
+				},
 			},
-			Target: &ebtables.DNATTarget{
-				ToDst:  ep.MACAddress,
-				Target: ebtables.Accept,
-			},
-		},
-	)
+		)
 
-	if err != nil {
-		log.Errorf("Failed to delete DNAT rule for endpoint: %v.", err)
-		returnedErr = err
+		if err != nil {
+			log.Errorf("Failed to delete DNAT rule for endpoint: %v.", err)
+			returnedErr = err
+		}
+	}
+
+	// Delete the route for ingress traffic for the endpoint to the bridge.
+	route := &netlink.Route{
+		LinkIndex: nw.BridgeIndex,
+		Scope:     netlink.SCOPE_LINK,
+		Dst:       ep.IPAddress,
+	}
+
+	_, maskSize := route.Dst.Mask.Size()
+	route.Dst.Mask = net.CIDRMask(maskSize, maskSize)
+
+	log.Infof("Deleting IP route %+v from bridge.", route)
+	err = netlink.RouteDel(route)
+	if err != nil && !os.IsNotExist(err) {
+		log.Errorf("Failed to delete IP route %+v: %v.", route, err)
+		return err
 	}
 
 	return returnedErr
@@ -212,6 +285,7 @@ func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
 // createBridge creates a bridge connected to the shared ENI. Returns the bridge interface index.
 func (nb *BridgeBuilder) createBridge(
 	bridgeName string,
+	bridgeType string,
 	sharedENI *eni.ENI,
 	ipAddress *net.IPNet) (int, error) {
 
@@ -238,7 +312,7 @@ func (nb *BridgeBuilder) createBridge(
 	defer func() {
 		if err != nil {
 			log.Infof("Cleaning up bridge on error: %v.", err)
-			cleanupErr := nb.deleteBridge(bridgeName, sharedENI)
+			cleanupErr := nb.deleteBridge(bridgeName, bridgeType, sharedENI)
 			if cleanupErr != nil {
 				log.Errorf("Failed to cleanup bridge: %v.", cleanupErr)
 			}
@@ -281,91 +355,94 @@ func (nb *BridgeBuilder) createBridge(
 		return 0, err
 	}
 
-	// Remove IP address from shared ENI link.
-	log.Infof("Removing IP address %v from ENI link %s.", ipAddress, sharedENI)
-	la = netlink.NewLinkAttrs()
-	la.Name = sharedENI.GetLinkName()
-	eniLink := &netlink.Dummy{LinkAttrs: la}
-	address := &netlink.Addr{IPNet: ipAddress}
-	err = netlink.AddrDel(eniLink, address)
-	if err != nil {
-		log.Errorf("Failed to remove IP address from ENI link %v: %v.", eniLink, err)
-		return 0, err
-	}
+	// Setup bridge layer2 configuration.
+	if bridgeType == config.BridgeTypeL2 {
+		// Remove IP address from shared ENI link.
+		log.Infof("Removing IP address %v from ENI link %s.", ipAddress, sharedENI)
+		la = netlink.NewLinkAttrs()
+		la.Name = sharedENI.GetLinkName()
+		eniLink := &netlink.Dummy{LinkAttrs: la}
+		address := &netlink.Addr{IPNet: ipAddress}
+		err = netlink.AddrDel(eniLink, address)
+		if err != nil {
+			log.Errorf("Failed to remove IP address from ENI link %v: %v.", eniLink, err)
+			return 0, err
+		}
 
-	// Append a MAC DNAT rule to broadcast ARP replies.
-	broadcastMACAddr, _ := net.ParseMAC("ff:ff:ff:ff:ff:ff")
-	err = ebtables.NAT.Append(
-		ebtables.PreRouting,
-		&ebtables.Rule{
-			Protocol: "ARP",
-			In:       sharedENI.GetLinkName(),
-			Match: &ebtables.ARPMatch{
-				Op: "Reply",
+		// Append a MAC DNAT rule to broadcast ARP replies.
+		broadcastMACAddr, _ := net.ParseMAC("ff:ff:ff:ff:ff:ff")
+		err = ebtables.NAT.Append(
+			ebtables.PreRouting,
+			&ebtables.Rule{
+				Protocol: "ARP",
+				In:       sharedENI.GetLinkName(),
+				Match: &ebtables.ARPMatch{
+					Op: "Reply",
+				},
+				Target: &ebtables.DNATTarget{
+					ToDst:  broadcastMACAddr,
+					Target: ebtables.Accept,
+				},
 			},
-			Target: &ebtables.DNATTarget{
-				ToDst:  broadcastMACAddr,
-				Target: ebtables.Accept,
+		)
+
+		if err != nil {
+			log.Errorf("Failed to append DNAT rule for ENI link %s: %v.", sharedENI, err)
+			return 0, err
+		}
+
+		// Append a MAC SNAT rule for unicast frames egress shared ENI to shared ENI's MAC address.
+		err = ebtables.NAT.Append(
+			ebtables.PostRouting,
+			&ebtables.Rule{
+				Out:     sharedENI.GetLinkName(),
+				SrcType: "unicast",
+				Target: &ebtables.SNATTarget{
+					ToSrc:  sharedENI.GetMACAddress(),
+					ARP:    true,
+					Target: ebtables.Accept,
+				},
 			},
-		},
-	)
+		)
 
-	if err != nil {
-		log.Errorf("Failed to append DNAT rule for ENI link %s: %v.", sharedENI, err)
-		return 0, err
-	}
+		if err != nil {
+			log.Errorf("Failed to append SNAT rule for ENI link %s: %v.", sharedENI, err)
+			return 0, err
+		}
 
-	// Append a MAC SNAT rule for unicast frames egress shared ENI to shared ENI's MAC address.
-	err = ebtables.NAT.Append(
-		ebtables.PostRouting,
-		&ebtables.Rule{
-			Out:     sharedENI.GetLinkName(),
-			SrcType: "unicast",
-			Target: &ebtables.SNATTarget{
-				ToSrc:  sharedENI.GetMACAddress(),
-				ARP:    true,
-				Target: ebtables.Accept,
-			},
-		},
-	)
+		// Set ENI link operational state down.
+		err = sharedENI.SetOpState(false)
+		if err != nil {
+			log.Errorf("Failed to set ENI link %s state: %v.", sharedENI, err)
+			return 0, err
+		}
 
-	if err != nil {
-		log.Errorf("Failed to append SNAT rule for ENI link %s: %v.", sharedENI, err)
-		return 0, err
-	}
+		// Set the ENI link MTU.
+		// This is necessary in case the ENI was not configured by DHCP.
+		log.Infof("Setting ENI link %s MTU to %d octets.", sharedENI, vpc.JumboFrameMTU)
+		err = sharedENI.SetLinkMTU(vpc.JumboFrameMTU)
+		if err != nil {
+			log.Errorf("Failed to set ENI link MTU: %v.", err)
+			return 0, err
+		}
 
-	// Set ENI link operational state down.
-	err = sharedENI.SetOpState(false)
-	if err != nil {
-		log.Errorf("Failed to set ENI link %s state: %v.", sharedENI, err)
-		return 0, err
-	}
+		// Connect ENI link to the bridge.
+		log.Infof("Setting ENI link %s master to %s.", sharedENI, bridgeName)
+		la = netlink.NewLinkAttrs()
+		la.Name = sharedENI.GetLinkName()
+		eniLink = &netlink.Dummy{LinkAttrs: la}
+		err = netlink.LinkSetMaster(eniLink, bridgeLink)
+		if err != nil {
+			log.Errorf("Failed to set ENI link master: %v", err)
+			return 0, err
+		}
 
-	// Set the ENI link MTU.
-	// This is necessary in case the ENI was not configured by DHCP.
-	log.Infof("Setting ENI link %s MTU to %d octets.", sharedENI, vpc.JumboFrameMTU)
-	err = sharedENI.SetLinkMTU(vpc.JumboFrameMTU)
-	if err != nil {
-		log.Errorf("Failed to set ENI link MTU: %v.", err)
-		return 0, err
-	}
-
-	// Connect ENI link to the bridge.
-	log.Infof("Setting ENI link %s master to %s.", sharedENI, bridgeName)
-	la = netlink.NewLinkAttrs()
-	la.Name = sharedENI.GetLinkName()
-	eniLink = &netlink.Dummy{LinkAttrs: la}
-	err = netlink.LinkSetMaster(eniLink, bridgeLink)
-	if err != nil {
-		log.Errorf("Failed to set ENI link master: %v", err)
-		return 0, err
-	}
-
-	// Set ENI link operational state up.
-	err = sharedENI.SetOpState(true)
-	if err != nil {
-		log.Errorf("Failed to set ENI link %s state: %v.", sharedENI, err)
-		return 0, err
+		// Set ENI link operational state up.
+		err = sharedENI.SetOpState(true)
+		if err != nil {
+			log.Errorf("Failed to set ENI link %s state: %v.", sharedENI, err)
+			return 0, err
+		}
 	}
 
 	// Set bridge link operational state up.
@@ -375,32 +452,35 @@ func (nb *BridgeBuilder) createBridge(
 		return 0, err
 	}
 
-	// Assign IP address to bridge.
-	log.Infof("Assigning IP address %v to bridge link %s.", ipAddress, bridgeName)
-	address = &netlink.Addr{IPNet: ipAddress}
-	err = netlink.AddrAdd(bridgeLink, address)
-	if err != nil {
-		log.Errorf("Failed to assign IP address to bridge link %v: %v.", bridgeName, err)
-		return 0, err
-	}
+	// Setup bridge layer2 configuration.
+	if bridgeType == config.BridgeTypeL2 {
+		// Assign IP address to bridge.
+		log.Infof("Assigning IP address %v to bridge link %s.", ipAddress, bridgeName)
+		address := &netlink.Addr{IPNet: ipAddress}
+		err = netlink.AddrAdd(bridgeLink, address)
+		if err != nil {
+			log.Errorf("Failed to assign IP address to bridge link %v: %v.", bridgeName, err)
+			return 0, err
+		}
 
-	// Add default route to subnet gateway via bridge.
-	subnet, err := vpc.NewSubnet(vpc.GetSubnetPrefix(ipAddress))
-	if err != nil {
-		log.Errorf("Failed to parse VPC subnet for %s: %v.", ipAddress, err)
-		return 0, err
-	}
+		// Add default route to subnet gateway via bridge.
+		subnet, err := vpc.NewSubnet(vpc.GetSubnetPrefix(ipAddress))
+		if err != nil {
+			log.Errorf("Failed to parse VPC subnet for %s: %v.", ipAddress, err)
+			return 0, err
+		}
 
-	route := &netlink.Route{
-		Gw:        subnet.Gateways[0],
-		LinkIndex: bridgeLink.Attrs().Index,
-	}
-	log.Infof("Adding default IP route %+v.", route)
+		route := &netlink.Route{
+			Gw:        subnet.Gateways[0],
+			LinkIndex: bridgeLink.Attrs().Index,
+		}
+		log.Infof("Adding default IP route %+v.", route)
 
-	err = netlink.RouteAdd(route)
-	if err != nil {
-		log.Errorf("Failed to add IP route %+v: %v.", route, err)
-		return 0, err
+		err = netlink.RouteAdd(route)
+		if err != nil {
+			log.Errorf("Failed to add IP route %+v: %v.", route, err)
+			return 0, err
+		}
 	}
 
 	return bridgeLink.Attrs().Index, nil
@@ -409,48 +489,52 @@ func (nb *BridgeBuilder) createBridge(
 // deleteBridge deletes the bridge connected to the shared ENI.
 func (nb *BridgeBuilder) deleteBridge(
 	bridgeName string,
+	bridgeType string,
 	sharedENI *eni.ENI) error {
 
-	// Delete the MAC DNAT rule that broadcasts ARP replies ingress shared ENI.
-	broadcastMACAddr, _ := net.ParseMAC("ff:ff:ff:ff:ff:ff")
+	// Delete bridge layer2 configuration.
+	if bridgeType == config.BridgeTypeL2 {
+		// Delete the MAC DNAT rule that broadcasts ARP replies ingress shared ENI.
+		broadcastMACAddr, _ := net.ParseMAC("ff:ff:ff:ff:ff:ff")
 
-	err := ebtables.NAT.Delete(
-		ebtables.PreRouting,
-		&ebtables.Rule{
-			Protocol: "ARP",
-			In:       sharedENI.GetLinkName(),
-			Match: &ebtables.ARPMatch{
-				Op: "Reply",
+		err := ebtables.NAT.Delete(
+			ebtables.PreRouting,
+			&ebtables.Rule{
+				Protocol: "ARP",
+				In:       sharedENI.GetLinkName(),
+				Match: &ebtables.ARPMatch{
+					Op: "Reply",
+				},
+				Target: &ebtables.DNATTarget{
+					ToDst:  broadcastMACAddr,
+					Target: ebtables.Accept,
+				},
 			},
-			Target: &ebtables.DNATTarget{
-				ToDst:  broadcastMACAddr,
-				Target: ebtables.Accept,
+		)
+
+		if err != nil && !os.IsNotExist(err) {
+			log.Errorf("Failed to delete DNAT rule for ENI link %s: %v.", sharedENI, err)
+			return err
+		}
+
+		// Delete the MAC SNAT rule to shared ENI's MAC address.
+		err = ebtables.NAT.Delete(
+			ebtables.PostRouting,
+			&ebtables.Rule{
+				Out:     sharedENI.GetLinkName(),
+				SrcType: "unicast",
+				Target: &ebtables.SNATTarget{
+					ToSrc:  sharedENI.GetMACAddress(),
+					ARP:    true,
+					Target: ebtables.Accept,
+				},
 			},
-		},
-	)
+		)
 
-	if err != nil && !os.IsNotExist(err) {
-		log.Errorf("Failed to delete DNAT rule for ENI link %s: %v.", sharedENI, err)
-		return err
-	}
-
-	// Delete the MAC SNAT rule to shared ENI's MAC address.
-	err = ebtables.NAT.Delete(
-		ebtables.PostRouting,
-		&ebtables.Rule{
-			Out:     sharedENI.GetLinkName(),
-			SrcType: "unicast",
-			Target: &ebtables.SNATTarget{
-				ToSrc:  sharedENI.GetMACAddress(),
-				ARP:    true,
-				Target: ebtables.Accept,
-			},
-		},
-	)
-
-	if err != nil && !os.IsNotExist(err) {
-		log.Errorf("Failed to delete SNAT rule for ENI link %s: %v.", sharedENI, err)
-		return err
+		if err != nil && !os.IsNotExist(err) {
+			log.Errorf("Failed to delete SNAT rule for ENI link %s: %v.", sharedENI, err)
+			return err
+		}
 	}
 
 	// Delete the dummy link for the bridge.
@@ -458,7 +542,7 @@ func (nb *BridgeBuilder) deleteBridge(
 	la.Name = fmt.Sprintf(dummyNameFormat, bridgeName)
 	dummyLink := &netlink.Dummy{LinkAttrs: la}
 	log.Infof("Deleting dummy link %+v.", dummyLink)
-	err = netlink.LinkDel(dummyLink)
+	err := netlink.LinkDel(dummyLink)
 	if err != nil && !os.IsNotExist(err) {
 		log.Errorf("Failed to delete dummy link: %v.", err)
 		return err

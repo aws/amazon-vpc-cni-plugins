@@ -34,6 +34,7 @@ type NetConfig struct {
 	ENIMACAddress    net.HardwareAddr
 	ENIIPAddress     *net.IPNet
 	VPCCIDRs         []net.IPNet
+	BridgeType       string
 	BridgeNetNSPath  string
 	IPAddress        *net.IPNet
 	GatewayIPAddress net.IP
@@ -49,6 +50,7 @@ type netConfigJSON struct {
 	ENIMACAddress    string   `json:"eniMACAddress"`
 	ENIIPAddress     string   `json:"eniIPAddress"`
 	VPCCIDRs         []string `json:"vpcCIDRs"`
+	BridgeType       string   `json:"bridgeType"`
 	BridgeNetNSPath  string   `json:"bridgeNetNSPath"`
 	IPAddress        string   `json:"ipAddress"`
 	GatewayIPAddress string   `json:"gatewayIPAddress"`
@@ -61,6 +63,10 @@ const (
 	// Bridge network namespace defaults to the host network namespace (empty string),
 	// or more precisely, whichever namespace the CNI plugin is running in.
 	defaultBridgeNetNSPath = ""
+
+	// Bridge type values.
+	BridgeTypeL2 = "L2"
+	BridgeTypeL3 = "L3"
 
 	// Interface type values.
 	IfTypeVETH = "veth"
@@ -82,6 +88,10 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	}
 
 	// Set defaults.
+	if config.BridgeType == "" {
+		config.BridgeType = BridgeTypeL3
+	}
+
 	if config.BridgeNetNSPath == "" {
 		config.BridgeNetNSPath = defaultBridgeNetNSPath
 	}
@@ -94,6 +104,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	netConfig := NetConfig{
 		NetConf:         config.NetConf,
 		ENIName:         config.ENIName,
+		BridgeType:      config.BridgeType,
 		BridgeNetNSPath: config.BridgeNetNSPath,
 		InterfaceType:   config.InterfaceType,
 		Kubernetes: KubernetesConfig{
@@ -126,6 +137,11 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 			}
 			netConfig.VPCCIDRs = append(netConfig.VPCCIDRs, *cidr)
 		}
+	}
+
+	// Parse the bridge type.
+	if config.BridgeType != BridgeTypeL2 && config.BridgeType != BridgeTypeL3 {
+		return nil, fmt.Errorf("invalid BridgeType %s", config.BridgeType)
 	}
 
 	// Parse the optional IP address.

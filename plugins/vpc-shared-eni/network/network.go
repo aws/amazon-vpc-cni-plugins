@@ -30,6 +30,7 @@ type Builder interface {
 // Network represents a container network.
 type Network struct {
 	Name                string
+	BridgeType          string
 	BridgeNetNSPath     string
 	BridgeIndex         int
 	SharedENI           *eni.ENI

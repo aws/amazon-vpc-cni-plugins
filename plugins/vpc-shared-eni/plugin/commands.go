@@ -56,6 +56,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	// Find or create the container network for the shared ENI.
 	nw := network.Network{
 		Name:                netConfig.Name,
+		BridgeType:          netConfig.BridgeType,
 		BridgeNetNSPath:     netConfig.BridgeNetNSPath,
 		SharedENI:           sharedENI,
 		ENIIPAddress:        netConfig.ENIIPAddress,
@@ -148,6 +149,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 
 	nw := network.Network{
 		Name:            netConfig.Name,
+		BridgeType:      netConfig.BridgeType,
 		BridgeNetNSPath: netConfig.BridgeNetNSPath,
 		SharedENI:       sharedENI,
 	}
