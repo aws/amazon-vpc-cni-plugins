@@ -37,6 +37,7 @@ const (
 	ifName                 = "testIf"
 	nsName                 = "testNS"
 	trunkMACAddress        = "02:71:ca:81:41:1e"
+	trunkName              = "eth1"
 	branchVlanID           = "101"
 	branchMACAddress       = "02:e1:48:75:86:a4"
 	branchIPAddress        = "172.31.19.6/20"
@@ -73,6 +74,16 @@ func TestAddDelBlockIMDS(t *testing.T) {
 }
 
 func TestAddDel(t *testing.T) {
+	var err error
+
+	// Bring down the trunk interface so that we can ensure the plugin is not assuming the trunk interface
+	// is already brought up.
+	la := netlink.NewLinkAttrs()
+	la.Name = trunkName
+	link := &netlink.Dummy{LinkAttrs: la}
+	err = netlink.LinkSetDown(link)
+	require.NoError(t, err)
+
 	testAddDel(t, netConfJsonFmt, validateAfterAdd, validateAfterDel)
 }
 
