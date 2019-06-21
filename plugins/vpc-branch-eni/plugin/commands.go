@@ -74,6 +74,13 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		return err
 	}
 
+	// Bring up the trunk ENI.
+	err = trunk.SetOpState(true)
+	if err != nil {
+		log.Errorf("Failed to bring up trunk interface %s: %v", netConfig.TrunkName, err)
+		return err
+	}
+
 	// Create the branch ENI.
 	branchName := fmt.Sprintf(branchLinkNameFormat, trunk.GetLinkName(), netConfig.BranchVlanID)
 	branch, err := eni.NewBranch(trunk, branchName, netConfig.BranchMACAddress, netConfig.BranchVlanID)
