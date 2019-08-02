@@ -106,7 +106,11 @@ func (nb *BridgeBuilder) DeleteNetwork(nw *Network) error {
 // FindOrCreateEndpoint connects the ENI to target network namespace using veth pairs.
 func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	// Derive endpoint names.
-	vethLinkName := fmt.Sprintf(vethLinkNameFormat, ep.ContainerID[:8])
+	cid := ep.ContainerID
+	if len(cid) > 8 {
+		cid = cid[:8]
+	}
+	vethLinkName := fmt.Sprintf(vethLinkNameFormat, cid)
 	vethPeerName := vethLinkName + "-2"
 
 	// Find the target network namespace.
