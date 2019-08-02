@@ -20,6 +20,7 @@ import (
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/ebtables"
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
+	"github.com/aws/amazon-vpc-cni-plugins/network/ipcfg"
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/config"
@@ -456,8 +457,10 @@ func (nb *BridgeBuilder) createBridge(
 		return 0, err
 	}
 
-	// Setup bridge layer2 configuration.
 	if bridgeType == config.BridgeTypeL2 {
+		// In layer2 configuration, the bridge inherits shared ENI's IP address and default route.
+		// Frames are switched between veth pairs and the shared ENI.
+
 		// Assign IP address to bridge.
 		log.Infof("Assigning IP address %v to bridge link %s.", ipAddress, bridgeName)
 		address := &netlink.Addr{IPNet: ipAddress}
@@ -483,6 +486,33 @@ func (nb *BridgeBuilder) createBridge(
 		err = netlink.RouteAdd(route)
 		if err != nil {
 			log.Errorf("Failed to add IP route %+v: %v.", route, err)
+			return 0, err
+		}
+	} else {
+		// In layer3 configuration, the IP address and default route remain on the shared ENI.
+		// IP datagrams are routed between the bridge and the shared ENI.
+
+		// Bridge proxies ARP requests originating from veth pairs to the VPC.
+		log.Infof("Enabling IPv4 proxy ARP on %s.", bridgeName)
+		err = ipcfg.SetIPv4ProxyARP(bridgeName, 1)
+		if err != nil {
+			log.Errorf("Failed to enable IPv4 proxy ARP on %s: %v.", bridgeName, err)
+			return 0, err
+		}
+
+		// Enable IPv4 forwarding on the bridge and shared ENI, so that IP datagrams can be
+		// routed between them.
+		log.Infof("Enabling IPv4 forwarding on %s.", bridgeName)
+		err = ipcfg.SetIPv4Forwarding(bridgeName, 1)
+		if err != nil {
+			log.Errorf("Failed to enable IPv4 forwarding on %s: %v.", bridgeName, err)
+			return 0, err
+		}
+
+		log.Infof("Enabling IPv4 forwarding on %s.", sharedENI.GetLinkName())
+		err = ipcfg.SetIPv4Forwarding(sharedENI.GetLinkName(), 1)
+		if err != nil {
+			log.Errorf("Failed to enable IPv4 forwarding on %s: %v.", sharedENI.GetLinkName(), err)
 			return 0, err
 		}
 	}
