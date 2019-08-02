@@ -75,7 +75,8 @@ func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs) error {
 	var ka kubernetesArgs
 	ka.IgnoreUnknown = ignoreUnknown
 
-	if err := cniTypes.LoadArgs(args.Args, &ka); err != nil {
+	err := cniTypes.LoadArgs(args.Args, &ka)
+	if err != nil {
 		return fmt.Errorf("failed to parse runtime args: %v", err)
 	}
 
@@ -93,6 +94,16 @@ func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs) error {
 		netConfig.DNS.Search[i] = strings.Replace(suffix, namespacePlaceholder, kc.Namespace, 1)
 	}
 
+	// Retrieve any missing information not available in netconfig.
+	if netConfig.IPAddress == nil {
+		err = retrievePodConfig(netConfig)
+	}
+
+	return err
+}
+
+// retrievePodConfig retrieves a pod's configuration from an external source.
+func retrievePodConfig(netConfig *NetConfig) error {
 	// Retrieve the IP address configuration from pod.
 	k8sClient, err := createKubeClient()
 	if err != nil {
@@ -100,6 +111,7 @@ func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs) error {
 	}
 
 	var ipAddress string
+	kc := &netConfig.Kubernetes
 
 	// Wait until the pod is annotated with an IP address resource label.
 	for i := 0; i < retries; i++ {
