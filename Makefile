@@ -31,7 +31,7 @@ endif
 
 # Build version.
 BUILD_VERSION ?= $(shell echo $(GIT_TAG) | sed 's/^v\([0-9]\)/\1/')
-BUILD_TIMESTAMP = $(shell date --iso-8601=seconds)
+BUILD_TIMESTAMP = $(shell date +%Y-%m-%dT%H:%M:%S%z)
 BUILD_RELEASE_FLAGS = -a
 BUILD_FLAGS ?= $(BUILD_RELEASE_FLAGS)
 LINKER_FLAGS = "\
