@@ -103,14 +103,18 @@ func validateConfig(config netConfigJSON) error {
 	if config.IgnoredGID == "" && config.IgnoredUID == "" {
 		return fmt.Errorf("missing required parameter ignoredGID or ignoredUID")
 	}
-	if len(config.AppPorts) == 0 {
-		return fmt.Errorf("missing required parameter appPorts")
-	}
 	if config.ProxyEgressPort == "" {
 		return fmt.Errorf("missing required parameter proxyEgressPort")
 	}
-	if config.ProxyIngressPort == "" {
+
+	// AppPorts and ProxyIngressPort go in pairs,
+	// i.e. either both are set or both are not set.
+	if config.ProxyIngressPort == "" && len(config.AppPorts) > 0 {
 		return fmt.Errorf("missing required parameter proxyIngressPort")
+	}
+
+	if config.ProxyIngressPort != "" && len(config.AppPorts) == 0 {
+		return fmt.Errorf("missing required parameter appPorts")
 	}
 
 	// Validate the format of all fields.

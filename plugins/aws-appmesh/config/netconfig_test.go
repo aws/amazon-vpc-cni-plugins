@@ -40,6 +40,10 @@ var (
 		config{
 			netConfig: `{"ignoredGID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "appPorts":["1223"]}`,
 		},
+		config{
+			// no ingress traffic, e.g. batch job.
+			netConfig: `{"ignoredGID":"1337", "proxyEgressPort":"8000"}`,
+		},
 	}
 
 	invalidConfigs = []config{
@@ -51,6 +55,12 @@ var (
 		},
 		config{
 			netConfig: `{"ignoredUID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "appPorts":["1223","2334"], "egressIgnoredPorts":["80"], "egressIgnoredIPs":["12a.22b.128.12","2001:0db8:85a3:0000:0000:8a2e:0370:7334"]}`,
+		},
+		config{
+			netConfig: `{"ignoredGID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000"}`,
+		},
+		config{
+			netConfig: `{"ignoredGID":"1337", "proxyEgressPort":"8000", "appPorts":["1223"]}`,
 		},
 	}
 )
