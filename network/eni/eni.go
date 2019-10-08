@@ -72,7 +72,7 @@ func (eni *ENI) AttachToLink() error {
 		// Find the interface by name.
 		iface, err = net.InterfaceByName(eni.linkName)
 		if err != nil {
-			log.Errorf("Failed to find interface with name %s: %v", eni.linkName, err)
+			log.Errorf("Failed to find an interface with name %s: %v.", eni.linkName, err)
 			return err
 		}
 	} else {
@@ -85,7 +85,7 @@ func (eni *ENI) AttachToLink() error {
 		iface = getInterfaceByMACAddress(eni.macAddress, interfaces)
 
 		if iface == nil {
-			log.Errorf("Failed to find interface with MAC address %s: %v", eni.macAddress, err)
+			log.Errorf("Failed to find an interface with MAC address %s.", eni.macAddress)
 			return fmt.Errorf("invalid MAC address")
 		}
 	}
