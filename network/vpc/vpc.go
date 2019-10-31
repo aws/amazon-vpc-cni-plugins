@@ -17,6 +17,6 @@ const (
 	// InstanceMetadataEndpoint is EC2's instance metadata endpoint.
 	InstanceMetadataEndpoint = "169.254.169.254/32"
 
-	// JumboFrameMTU is the Jumbo Ethernet Frame Maximum Transmission Unit size in bytes.
-	JumboFrameMTU = 9000
+	// JumboFrameMTU is the VPC jumbo Ethernet frame Maximum Transmission Unit size in bytes.
+	JumboFrameMTU = 9001
 )
