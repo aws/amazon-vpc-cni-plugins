@@ -324,18 +324,12 @@ func (nb *BridgeBuilder) createBridge(
 		}
 	}()
 
-	// Set bridge link MTU.
-	log.Infof("Setting bridge link %s MTU to %d octets.", bridgeName, vpc.JumboFrameMTU)
-	err = netlink.LinkSetMTU(bridgeLink, vpc.JumboFrameMTU)
-	if err != nil {
-		log.Errorf("Failed to set bridge link MTU: %v.", err)
-		return 0, err
-	}
-
 	// Connect a dummy link to the bridge.
+	// Bridge inherits the smallest MTU of links connected to its ports.
 	dummyName := fmt.Sprintf(dummyNameFormat, bridgeName)
 	la = netlink.NewLinkAttrs()
 	la.Name = dummyName
+	la.MTU = vpc.JumboFrameMTU
 	la.MasterIndex = bridgeLink.Attrs().Index
 	dummyLink := &netlink.Dummy{LinkAttrs: la}
 	log.Infof("Creating dummy link %+v.", dummyLink)
