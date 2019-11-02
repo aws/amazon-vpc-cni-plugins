@@ -41,11 +41,12 @@ LINKER_FLAGS = "\
 		-s"
 
 # Source files.
-COMMON_SOURCE_FILES = $(wildcard cni/*.go, logger/*.go, network/*.go, version/*.go)
+COMMON_SOURCE_FILES = $(wildcard capabilities/* cni/* logger/* network/*/* version/*)
 VPC_SHARED_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-shared-eni -type f)
 VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-eni -type f)
 VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-pat-eni -type f)
 AWS_APPMESH_PLUGIN_SOURCE_FILES = $(shell find plugins/aws-appmesh -type f)
+NETNSEXEC_TOOL_SOURCE_FILES = $(shell find tools/netnsexec -type f)
 ALL_SOURCE_FILES := $(shell find . -name '*.go')
 
 # Shorthand build targets.
@@ -53,7 +54,10 @@ vpc-shared-eni: $(BUILD_DIR)/vpc-shared-eni
 vpc-branch-eni: $(BUILD_DIR)/vpc-branch-eni
 vpc-branch-pat-eni: $(BUILD_DIR)/vpc-branch-pat-eni
 aws-appmesh: $(BUILD_DIR)/aws-appmesh
-all-binaries: vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni aws-appmesh
+netnsexec: $(BUILD_DIR)/netnsexec
+all-plugins: vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni aws-appmesh
+all-tools: netnsexec
+all-binaries: all-plugins all-tools
 build: all-binaries unit-test
 
 # Build the vpc-shared-eni CNI plugin.
@@ -103,6 +107,18 @@ $(BUILD_DIR)/aws-appmesh: $(AWS_APPMESH_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FIL
 		-o $(BUILD_DIR)/aws-appmesh \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh
 	@echo "Built aws-appmesh plugin."
+
+# Build the netnsexec tool.
+$(BUILD_DIR)/netnsexec: $(NETNSEXEC_TOOL_SOURCE_FILES) $(COMMON_SOURCE_FILES)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
+	go build \
+		-installsuffix cgo \
+		-v \
+		$(BUILD_FLAGS) \
+		-ldflags $(LINKER_FLAGS) \
+		-o $(BUILD_DIR)/netnsexec \
+		github.com/aws/amazon-vpc-cni-plugins/tools/netnsexec
+	@echo $(COMMON_SOURCE_FILES)
 
 # Run all unit tests.
 .PHONY: unit-test
