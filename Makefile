@@ -118,7 +118,7 @@ $(BUILD_DIR)/netnsexec: $(NETNSEXEC_TOOL_SOURCE_FILES) $(COMMON_SOURCE_FILES)
 		-ldflags $(LINKER_FLAGS) \
 		-o $(BUILD_DIR)/netnsexec \
 		github.com/aws/amazon-vpc-cni-plugins/tools/netnsexec
-	@echo $(COMMON_SOURCE_FILES)
+	@echo "Built netnsexec tool."
 
 # Run all unit tests.
 .PHONY: unit-test
