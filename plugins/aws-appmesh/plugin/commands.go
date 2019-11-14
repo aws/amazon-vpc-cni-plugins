@@ -20,18 +20,17 @@ import (
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
 	cniTypes "github.com/containernetworking/cni/pkg/types"
-	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/current"
 	"github.com/coreos/go-iptables/iptables"
 )
 
 const (
+	// Names of iptables chains created for App Mesh rules.
 	ingressChain = "APPMESH_INGRESS"
 	egressChain  = "APPMESH_EGRESS"
 )
 
 // Add is the internal implementation of CNI ADD command.
 func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
-
 	// Parse network configuration.
 	netConfig, err := config.New(args)
 	if err != nil {
@@ -73,12 +72,10 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		return err
 	}
 
-	// Generate CNI result.
-	result := &cniTypesCurrent.Result{}
+	// Pass through the previous result.
+	log.Infof("Writing CNI result to stdout: %+v", netConfig.PrevResult)
 
-	log.Debugf("Writing CNI result to stdout: %+v", result)
-
-	return cniTypes.PrintResult(result, netConfig.CNIVersion)
+	return cniTypes.PrintResult(netConfig.PrevResult, netConfig.CNIVersion)
 }
 
 // Del is the internal implementation of CNI DEL command.
@@ -123,7 +120,8 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 }
 
 // setupIptablesRules sets iptables/ip6tables rules in container network namespace.
-func (plugin *Plugin) setupIptablesRules(proto iptables.Protocol,
+func (plugin *Plugin) setupIptablesRules(
+	proto iptables.Protocol,
 	config *config.NetConfig,
 	egressIgnoredIPs string) error {
 	// Create a new iptables object.

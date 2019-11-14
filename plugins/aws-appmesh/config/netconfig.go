@@ -23,12 +23,15 @@ import (
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
 	cniTypes "github.com/containernetworking/cni/pkg/types"
+	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/current"
+	cniVersion "github.com/containernetworking/cni/pkg/version"
 	"github.com/pkg/errors"
 )
 
 // NetConfig defines the network configuration for the aws-appmesh cni plugin.
 type NetConfig struct {
 	cniTypes.NetConf
+	PrevResult         *cniTypesCurrent.Result
 	IgnoredUID         string
 	IgnoredGID         string
 	ProxyIngressPort   string
@@ -43,6 +46,8 @@ type NetConfig struct {
 // netConfigJSON defines the network configuration JSON file format for the aws-appmesh cni plugin.
 type netConfigJSON struct {
 	cniTypes.NetConf
+	PrevResult map[string]interface{} `json:"prevResult,omitempty"`
+
 	IgnoredUID         string   `json:"ignoredUID"`
 	IgnoredGID         string   `json:"ignoredGID"`
 	ProxyIngressPort   string   `json:"proxyIngressPort"`
@@ -90,6 +95,27 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		EgressIgnoredIPv6s: ipv6s,
 		EgressIgnoredPorts: strings.Join(config.EgressIgnoredPorts, splitter),
 		EnableIPv6:         config.EnableIPv6,
+	}
+
+	if config.PrevResult != nil {
+		// Plugin was called as part of a chain. Parse the previous result to pass forward.
+		prevResBytes, err := json.Marshal(config.PrevResult)
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize prevResult: %v", err)
+		}
+
+		prevRes, err := cniVersion.NewResult(config.CNIVersion, prevResBytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse prevResult: %v", err)
+		}
+
+		netConfig.PrevResult, err = cniTypesCurrent.NewResultFromResult(prevRes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert result to current version: %v", err)
+		}
+	} else {
+		// Plugin was called stand-alone.
+		netConfig.PrevResult = &cniTypesCurrent.Result{}
 	}
 
 	// Validation complete. Return the parsed NetConfig object.
