@@ -36,7 +36,8 @@ type NetConfig struct {
 	BranchIPAddress        *net.IPNet
 	BranchGatewayIPAddress net.IP
 	InterfaceType          string
-	UserName               string
+	Uid                    int
+	Gid                    int
 	BlockIMDS              bool
 }
 
@@ -50,7 +51,8 @@ type netConfigJSON struct {
 	BranchIPAddress        string `json:"branchIPAddress"`
 	BranchGatewayIPAddress string `json:"branchGatewayIPAddress"`
 	InterfaceType          string `json:"interfaceType"`
-	UserName               string `json:"userName"`
+	Uid                    string `json:"uid"`
+	Gid                    string `json:"gid"`
 	BlockIMDS              bool   `json:"blockInstanceMetadata"`
 }
 
@@ -102,6 +104,11 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		}
 	}
 
+	// Set defaults.
+	if config.InterfaceType == "" {
+		config.InterfaceType = IfTypeTAP
+	}
+
 	// Validate if all the required fields are present.
 	if config.TrunkName == "" && config.TrunkMACAddress == "" {
 		return nil, fmt.Errorf("missing required parameter trunkName or trunkMACAddress")
@@ -113,9 +120,14 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		return nil, fmt.Errorf("missing required parameter branchMACAddress")
 	}
 
-	// Set defaults.
-	if config.InterfaceType == "" {
-		config.InterfaceType = IfTypeTAP
+	// Under TAP mode, uid and gid are required to set TAP device permission.
+	if config.InterfaceType == IfTypeTAP {
+		if config.Uid == "" {
+			return nil, fmt.Errorf("missing required parameter uid")
+		}
+		if config.Gid == "" {
+			return nil, fmt.Errorf("missing required parameter gid")
+		}
 	}
 
 	// Populate NetConfig.
@@ -123,7 +135,6 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		NetConf:       config.NetConf,
 		TrunkName:     config.TrunkName,
 		InterfaceType: config.InterfaceType,
-		UserName:      config.UserName,
 		BlockIMDS:     config.BlockIMDS,
 	}
 
@@ -152,6 +163,20 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		netConfig.BranchIPAddress, err = vpc.GetIPAddressFromString(config.BranchIPAddress)
 		if err != nil {
 			return nil, fmt.Errorf("invalid branchIPAddress %s", config.BranchIPAddress)
+		}
+	}
+
+	if config.Uid != "" {
+		netConfig.Uid, err = strconv.Atoi(config.Uid)
+		if err != nil {
+			return nil, fmt.Errorf("invalid uid %s", config.Uid)
+		}
+	}
+
+	if config.Gid != "" {
+		netConfig.Gid, err = strconv.Atoi(config.Gid)
+		if err != nil {
+			return nil, fmt.Errorf("invalid gid %s", config.Gid)
 		}
 	}
 
