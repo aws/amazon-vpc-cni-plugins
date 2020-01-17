@@ -56,17 +56,6 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		return err
 	}
 
-	// Lookup the user ID for TAP link ownership.
-	var uid int
-	if netConfig.InterfaceType == config.IfTypeTAP {
-		uid, err = plugin.LookupUser(netConfig.UserName)
-		if err != nil {
-			log.Errorf("Failed to lookup user %s: %v.", netConfig.UserName, err)
-			return err
-		}
-		log.Infof("Lookup for username %s returned uid %d.", netConfig.UserName, uid)
-	}
-
 	// Create the trunk ENI.
 	trunk, err := eni.NewTrunk(netConfig.TrunkName, netConfig.TrunkMACAddress, eni.TrunkIsolationModeVLAN)
 	if err != nil {
@@ -119,7 +108,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 			// Container is running in a VM.
 			// Connect the branch ENI to a TAP link in the target network namespace.
 			bridgeName := fmt.Sprintf(bridgeNameFormat, netConfig.BranchVlanID)
-			err = plugin.createTAPLink(bridgeName, branchName, args.IfName, uid)
+			err = plugin.createTAPLink(bridgeName, branchName, args.IfName, netConfig.Uid, netConfig.Gid)
 		case config.IfTypeMACVTAP:
 			// Container is running in a VM.
 			// Connect the branch ENI to a MACVTAP link in the target network namespace.
@@ -297,7 +286,8 @@ func (plugin *Plugin) createVLANLink(branch *eni.Branch, linkName string, ipAddr
 }
 
 // createTAPLink creates a TAP link in the target network namespace.
-func (plugin *Plugin) createTAPLink(bridgeName string, branchName string, tapLinkName string, uid int) error {
+func (plugin *Plugin) createTAPLink(bridgeName string, branchName string,
+	tapLinkName string, uid, gid int) error {
 	// Create the bridge link.
 	la := netlink.NewLinkAttrs()
 	la.Name = bridgeName
@@ -362,11 +352,16 @@ func (plugin *Plugin) createTAPLink(bridgeName string, branchName string, tapLin
 	}
 
 	// Set TAP link ownership.
-	log.Infof("Setting TAP link owner to uid %d.", uid)
+	log.Infof("Setting TAP link owner to uid %d and gid %d.", uid, gid)
 	fd := int(tapLink.Fds[0].Fd())
 	err = unix.IoctlSetInt(fd, unix.TUNSETOWNER, uid)
 	if err != nil {
-		log.Errorf("Failed to set TAP link owner: %v", err)
+		log.Errorf("Failed to set TAP link uid: %v", err)
+		return err
+	}
+	err = unix.IoctlSetInt(fd, unix.TUNSETGROUP, gid)
+	if err != nil {
+		log.Errorf("Failed to set TAP link gid: %v", err)
 		return err
 	}
 
