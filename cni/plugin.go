@@ -17,9 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/user"
 	"runtime"
-	"strconv"
 
 	"github.com/aws/amazon-vpc-cni-plugins/capabilities"
 	"github.com/aws/amazon-vpc-cni-plugins/logger"
@@ -154,28 +152,4 @@ func (plugin *Plugin) printVersionInfo() error {
 	fmt.Println(versionInfo)
 
 	return nil
-}
-
-// LookupUser returns the UID for the given username, or the current user.
-func (plugin *Plugin) LookupUser(userName string) (int, error) {
-	var u *user.User
-	var err error
-
-	// Lookup the current user if no username is given.
-	if userName == "" {
-		u, err = user.Current()
-	} else {
-		u, err = user.Lookup(userName)
-	}
-
-	if err != nil {
-		return -1, err
-	}
-
-	uid, err := strconv.Atoi(u.Uid)
-	if err != nil {
-		return -1, err
-	}
-
-	return uid, nil
 }
