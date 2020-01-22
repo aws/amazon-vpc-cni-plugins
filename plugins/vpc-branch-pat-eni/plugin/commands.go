@@ -77,14 +77,6 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		return err
 	}
 
-	// Lookup the user ID for TAP link.
-	uid, err := plugin.LookupUser(netConfig.UserName)
-	if err != nil {
-		log.Errorf("Failed to lookup user %s: %v.", netConfig.UserName, err)
-		return err
-	}
-	log.Infof("Lookup for username %s returned uid %d.", netConfig.UserName, uid)
-
 	// Create the trunk ENI.
 	trunk, err := eni.NewTrunk(netConfig.TrunkName, netConfig.TrunkMACAddress, eni.TrunkIsolationModeVLAN)
 	if err != nil {
@@ -126,7 +118,6 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		vethPeerName, verr = plugin.createVethPair(
 			netConfig.BranchVlanID, args.ContainerID, bridgeName, targetNetNS)
 		return verr
-
 	})
 	if err != nil {
 		log.Errorf("Failed to create veth pair: %v.", err)
@@ -136,7 +127,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	// Create the tap link in target network namespace.
 	log.Infof("Creating tap link %s.", tapLinkName)
 	err = targetNetNS.Run(func() error {
-		return plugin.createTapLink(tapBridgeName, vethPeerName, tapLinkName, uid)
+		return plugin.createTapLink(tapBridgeName, vethPeerName, tapLinkName, netConfig.Uid, netConfig.Gid)
 	})
 	if err != nil {
 		log.Errorf("Failed to create tap link: %v.", err)
@@ -531,7 +522,9 @@ func (plugin *Plugin) createTapLink(
 	bridgeName string,
 	vethLinkName string,
 	tapLinkName string,
-	uid int) error {
+	uid int,
+	gid int) error {
+
 	// Create the bridge link.
 	la := netlink.NewLinkAttrs()
 	la.Name = bridgeName
@@ -590,11 +583,16 @@ func (plugin *Plugin) createTapLink(
 	}
 
 	// Set tap link ownership.
-	log.Infof("Setting tap link %s owner to uid %d.", tapLinkName, uid)
+	log.Infof("Setting tap link %s owner to uid %d and gid %d.", tapLinkName, uid, gid)
 	fd := int(tapLink.Fds[0].Fd())
 	err = unix.IoctlSetInt(fd, unix.TUNSETOWNER, uid)
 	if err != nil {
-		log.Errorf("Failed to set tap link %s owner: %v.", tapLinkName, err)
+		log.Errorf("Failed to set tap link %s uid: %v.", tapLinkName, err)
+		return err
+	}
+	err = unix.IoctlSetInt(fd, unix.TUNSETGROUP, gid)
+	if err != nil {
+		log.Errorf("Failed to set tap link %s gid: %v.", tapLinkName, err)
 		return err
 	}
 

@@ -34,7 +34,8 @@ type NetConfig struct {
 	BranchVlanID     int
 	BranchMACAddress net.HardwareAddr
 	BranchIPAddress  net.IPNet
-	UserName         string
+	Uid              int
+	Gid              int
 	CleanupPATNetNS  bool
 }
 
@@ -46,7 +47,8 @@ type netConfigJSON struct {
 	BranchVlanID     string `json:"branchVlanID"`
 	BranchMACAddress string `json:"branchMACAddress"`
 	BranchIPAddress  string `json:"branchIPAddress"`
-	UserName         string `json:"userName"`
+	Uid              string `json:"uid"`
+	Gid              string `json:"gid"`
 	CleanupPATNetNS  bool   `json:"cleanupPATNetNS"`
 }
 
@@ -73,7 +75,6 @@ func New(args *cniSkel.CmdArgs, isAdd bool) (*NetConfig, error) {
 	netConfig := NetConfig{
 		NetConf:         config.NetConf,
 		TrunkName:       config.TrunkName,
-		UserName:        config.UserName,
 		CleanupPATNetNS: config.CleanupPATNetNS,
 	}
 
@@ -105,6 +106,21 @@ func New(args *cniSkel.CmdArgs, isAdd bool) (*NetConfig, error) {
 		netConfig.BranchIPAddress = *ipAddr
 		if err != nil {
 			return nil, fmt.Errorf("invalid branchIPAddress %s", config.BranchIPAddress)
+		}
+	}
+
+	// Parse the optional TAP interface UID and GID.
+	if config.Uid != "" {
+		netConfig.Uid, err = strconv.Atoi(config.Uid)
+		if err != nil {
+			return nil, fmt.Errorf("invalid UID %s", config.Uid)
+		}
+	}
+
+	if config.Gid != "" {
+		netConfig.Gid, err = strconv.Atoi(config.Gid)
+		if err != nil {
+			return nil, fmt.Errorf("invalid GID %s", config.Gid)
 		}
 	}
 
