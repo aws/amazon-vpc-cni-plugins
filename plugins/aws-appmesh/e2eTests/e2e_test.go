@@ -24,6 +24,7 @@ import (
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/containernetworking/cni/pkg/invoke"
+	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,6 +47,9 @@ const (
 	nsName                     = "testNS"
 	netConf                    = `
 {
+    "prevResult": {
+        "IPs": [{"Version":"4","Address":"10.1.2.3/16"}]
+    },
     "type":"aws-appmesh",
     "cniVersion":"0.3.0",
     "ignoredUID":"1337",
@@ -68,6 +72,7 @@ const (
 }`
 )
 
+// TestAddDel tests that the plugin adds and deletes iptables rules as expected.
 func TestAddDel(t *testing.T) {
 	// Ensure that the cni plugin exists.
 	pluginPath, err := invoke.FindInPath("aws-appmesh", []string{os.Getenv("CNI_PATH")})
@@ -108,11 +113,18 @@ func TestAddDel(t *testing.T) {
 
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
-	err = invoke.ExecPluginWithoutResult(
+	res, err := invoke.ExecPluginWithResult(
 		pluginPath,
 		netConf,
 		execInvokeArgs)
 	require.NoError(t, err, "Unable to execute ADD command for aws-appmesh cni plugin")
+
+	// Test that the plugin passed previous CNI result unmodified.
+	res031, err := res.GetAsVersion("0.3.1")
+	assert.NoError(t, err, "Unable to parse result")
+	result := res031.(*current.Result)
+	assert.Equal(t, "4", result.IPs[0].Version)
+	assert.Equal(t, "10.1.2.3/16", result.IPs[0].Address.String())
 
 	targetNS.Run(func() error {
 		// Validate IP rules successfully added.
@@ -135,7 +147,7 @@ func TestAddDel(t *testing.T) {
 	})
 }
 
-//TestAddReturnError tests when required network configuration is missed, ADD will return error as expected.
+// TestAddReturnError tests when required network configuration is missed, ADD will return error as expected.
 func TestAddReturnError(t *testing.T) {
 	// Ensure that the eni plugin exists.
 	pluginPath, err := invoke.FindInPath("aws-appmesh", []string{os.Getenv("CNI_PATH")})
