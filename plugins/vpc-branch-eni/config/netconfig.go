@@ -120,7 +120,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		return nil, fmt.Errorf("missing required parameter branchMACAddress")
 	}
 
-	// Under TAP mode, uid and gid are required to set TAP device permission.
+	// Under TAP mode, UID and GID are required to set TAP device permission.
 	if config.InterfaceType == IfTypeTAP {
 		if config.Uid == "" {
 			return nil, fmt.Errorf("missing required parameter uid")
@@ -166,6 +166,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		}
 	}
 
+	// Parse the TAP interface owner UID and GID.
 	if config.Uid != "" {
 		netConfig.Uid, err = strconv.Atoi(config.Uid)
 		if err != nil {
@@ -180,7 +181,9 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		}
 	}
 
-	netConfig.BranchGatewayIPAddress, err = getGatewayIPAddress(netConfig.BranchIPAddress, config.BranchGatewayIPAddress)
+	// Compute the optional gateway IP address.
+	netConfig.BranchGatewayIPAddress, err =
+		getGatewayIPAddress(netConfig.BranchIPAddress, config.BranchGatewayIPAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +195,8 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 
 func getGatewayIPAddress(ipAddress *net.IPNet, gatewayIPAddressString string) (net.IP, error) {
 	var gatewayIPAddress net.IP
-	// If gateway IP address is provided, use it.
+
+	// If an explicit gateway IP address is provided, use it.
 	if gatewayIPAddressString != "" {
 		gatewayIPAddress = net.ParseIP(gatewayIPAddressString)
 		if gatewayIPAddress == nil {
@@ -202,13 +206,13 @@ func getGatewayIPAddress(ipAddress *net.IPNet, gatewayIPAddressString string) (n
 		return gatewayIPAddress, nil
 	}
 
-	// Else if neither gateway IP address nor ipAddress is provided, we cannot get a gateway IP address
-	// so just leave it as nil.
+	// If neither gateway IP address nor container IP address is provided, cannot compute a gateway
+	// IP address, so just leave it as nil.
 	if ipAddress == nil {
 		return nil, nil
 	}
 
-	// Else, infer the gateway IP address from the subnet that ipAddress is in.
+	// Otherwise, infer the gateway IP address from the subnet that the container IP address is in.
 	subnet, err := vpc.NewSubnet(vpc.GetSubnetPrefix(ipAddress))
 	if err != nil {
 		log.Errorf("Failed to parse VPC subnet for %s: %v.", ipAddress, err)

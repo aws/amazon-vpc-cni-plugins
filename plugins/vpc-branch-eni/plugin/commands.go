@@ -242,7 +242,12 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 }
 
 // createVLANLink creates a VLAN link in the target network namespace.
-func (plugin *Plugin) createVLANLink(branch *eni.Branch, linkName string, ipAddress *net.IPNet, gatewayIPAddress net.IP) error {
+func (plugin *Plugin) createVLANLink(
+	branch *eni.Branch,
+	linkName string,
+	ipAddress *net.IPNet,
+	gatewayIPAddress net.IP) error {
+
 	// Rename the branch link to the requested interface name.
 	log.Infof("Renaming branch link %v to %s.", branch, linkName)
 	err := branch.SetLinkName(linkName)
@@ -286,8 +291,13 @@ func (plugin *Plugin) createVLANLink(branch *eni.Branch, linkName string, ipAddr
 }
 
 // createTAPLink creates a TAP link in the target network namespace.
-func (plugin *Plugin) createTAPLink(bridgeName string, branchName string,
-	tapLinkName string, uid, gid int) error {
+func (plugin *Plugin) createTAPLink(
+	bridgeName string,
+	branchName string,
+	tapLinkName string,
+	uid int,
+	gid int) error {
+
 	// Create the bridge link.
 	la := netlink.NewLinkAttrs()
 	la.Name = bridgeName
@@ -352,16 +362,16 @@ func (plugin *Plugin) createTAPLink(bridgeName string, branchName string,
 	}
 
 	// Set TAP link ownership.
-	log.Infof("Setting TAP link owner to uid %d and gid %d.", uid, gid)
+	log.Infof("Setting TAP link owner to UID %d and GID %d.", uid, gid)
 	fd := int(tapLink.Fds[0].Fd())
 	err = unix.IoctlSetInt(fd, unix.TUNSETOWNER, uid)
 	if err != nil {
-		log.Errorf("Failed to set TAP link uid: %v", err)
+		log.Errorf("Failed to set TAP link UID: %v", err)
 		return err
 	}
 	err = unix.IoctlSetInt(fd, unix.TUNSETGROUP, gid)
 	if err != nil {
-		log.Errorf("Failed to set TAP link gid: %v", err)
+		log.Errorf("Failed to set TAP link GID: %v", err)
 		return err
 	}
 

@@ -31,19 +31,19 @@ type config struct {
 var (
 	validConfigs = []config{
 		config{
-			netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/16", "branchGatewayIPAddress":"10.11.0.1"}`,
+			netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/16", "branchGatewayIPAddress":"10.11.0.1", "uid":"42", "gid":"42"}`,
 			pcArgs:    "",
 		},
 		config{
-			netConfig: `{"trunkMACAddress":"42:42:42:42:42:42", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14"}`,
+			netConfig: `{"trunkMACAddress":"42:42:42:42:42:42", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14", "uid":"42", "gid":"42"}`,
 			pcArgs:    "",
 		},
 		config{
-			netConfig: `{"trunkMACAddress":"42:42:42:42:42:42", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14", "blockInstanceMetadata":true}`,
+			netConfig: `{"trunkMACAddress":"42:42:42:42:42:42", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14", "blockInstanceMetadata":true, "uid":"42", "gid":"42"}`,
 			pcArgs:    "",
 		},
 		config{
-			netConfig: `{"trunkName":"eth1"}`,
+			netConfig: `{"trunkName":"eth1", "uid":"42", "gid":"42"}`,
 			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
 		},
 	}
@@ -88,7 +88,7 @@ func TestInvalidConfigs(t *testing.T) {
 // TestPerContainerArgsOverrideNetConfig tests that per-container args override per-network args.
 func TestPerContainerArgsOverrideNetConfig(t *testing.T) {
 	c := config{
-		netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14"}`,
+		netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14", "uid":"42", "gid":"42"}`,
 		pcArgs:    "BranchVlanID=42;BranchMACAddress=44:44:44:55:55:55;BranchIPAddress=192.168.1.2/16",
 	}
 
