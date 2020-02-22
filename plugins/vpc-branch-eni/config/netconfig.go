@@ -35,10 +35,10 @@ type NetConfig struct {
 	BranchMACAddress       net.HardwareAddr
 	BranchIPAddress        *net.IPNet
 	BranchGatewayIPAddress net.IP
+	BlockIMDS              bool
 	InterfaceType          string
 	Uid                    int
 	Gid                    int
-	BlockIMDS              bool
 }
 
 // netConfigJSON defines the network configuration JSON file format for the vpc-branch-eni plugin.
@@ -50,18 +50,19 @@ type netConfigJSON struct {
 	BranchMACAddress       string `json:"branchMACAddress"`
 	BranchIPAddress        string `json:"branchIPAddress"`
 	BranchGatewayIPAddress string `json:"branchGatewayIPAddress"`
+	BlockIMDS              bool   `json:"blockInstanceMetadata"`
 	InterfaceType          string `json:"interfaceType"`
 	Uid                    string `json:"uid"`
 	Gid                    string `json:"gid"`
-	BlockIMDS              bool   `json:"blockInstanceMetadata"`
 }
 
 // pcArgs defines the per-container arguments passed in CNI_ARGS environment variable.
 type pcArgs struct {
 	cniTypes.CommonArgs
-	BranchVlanID     cniTypes.UnmarshallableString
-	BranchMACAddress cniTypes.UnmarshallableString
-	BranchIPAddress  cniTypes.UnmarshallableString
+	BranchVlanID           cniTypes.UnmarshallableString
+	BranchMACAddress       cniTypes.UnmarshallableString
+	BranchIPAddress        cniTypes.UnmarshallableString
+	BranchGatewayIPAddress cniTypes.UnmarshallableString
 }
 
 const (
@@ -102,6 +103,9 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		if pca.BranchIPAddress != "" {
 			config.BranchIPAddress = string(pca.BranchIPAddress)
 		}
+		if pca.BranchGatewayIPAddress != "" {
+			config.BranchGatewayIPAddress = string(pca.BranchGatewayIPAddress)
+		}
 	}
 
 	// Set defaults.
@@ -120,7 +124,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		return nil, fmt.Errorf("missing required parameter branchMACAddress")
 	}
 
-	// Under TAP mode, UID and GID are required to set TAP device permission.
+	// Under TAP mode, UID and GID are required to set TAP ownership.
 	if config.InterfaceType == IfTypeTAP {
 		if config.Uid == "" {
 			return nil, fmt.Errorf("missing required parameter uid")
@@ -134,8 +138,8 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	netConfig := NetConfig{
 		NetConf:       config.NetConf,
 		TrunkName:     config.TrunkName,
-		InterfaceType: config.InterfaceType,
 		BlockIMDS:     config.BlockIMDS,
+		InterfaceType: config.InterfaceType,
 	}
 
 	// Parse the trunk MAC address.
