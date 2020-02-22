@@ -108,7 +108,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 			// Container is running in a VM.
 			// Connect the branch ENI to a TAP link in the target network namespace.
 			bridgeName := fmt.Sprintf(bridgeNameFormat, netConfig.BranchVlanID)
-			err = plugin.createTAPLink(bridgeName, branchName, args.IfName, netConfig.Uid, netConfig.Gid)
+			err = plugin.createTAPLink(bridgeName, branchName, args.IfName, netConfig.Tap)
 		case config.IfTypeMACVTAP:
 			// Container is running in a VM.
 			// Connect the branch ENI to a MACVTAP link in the target network namespace.
@@ -295,8 +295,7 @@ func (plugin *Plugin) createTAPLink(
 	bridgeName string,
 	branchName string,
 	tapLinkName string,
-	uid int,
-	gid int) error {
+	tapCfg *config.TAPConfig) error {
 
 	// Create the bridge link.
 	la := netlink.NewLinkAttrs()
@@ -336,6 +335,7 @@ func (plugin *Plugin) createTAPLink(
 	}
 
 	// Create the TAP link.
+	// Parse headers added by virtio_net implementation.
 	la = netlink.NewLinkAttrs()
 	la.Name = tapLinkName
 	la.MasterIndex = bridge.Index
@@ -343,8 +343,12 @@ func (plugin *Plugin) createTAPLink(
 	tapLink := &netlink.Tuntap{
 		LinkAttrs: la,
 		Mode:      netlink.TUNTAP_MODE_TAP,
-		Flags:     netlink.TUNTAP_ONE_QUEUE | netlink.TUNTAP_VNET_HDR,
-		Queues:    1,
+		Flags:     netlink.TUNTAP_VNET_HDR,
+		Queues:    tapCfg.Queues,
+	}
+
+	if tapCfg.Queues == 1 {
+		tapLink.Flags |= netlink.TUNTAP_ONE_QUEUE
 	}
 
 	log.Infof("Creating TAP link %+v.", tapLink)
@@ -362,17 +366,22 @@ func (plugin *Plugin) createTAPLink(
 	}
 
 	// Set TAP link ownership.
-	log.Infof("Setting TAP link owner to UID %d and GID %d.", uid, gid)
-	fd := int(tapLink.Fds[0].Fd())
-	err = unix.IoctlSetInt(fd, unix.TUNSETOWNER, uid)
-	if err != nil {
-		log.Errorf("Failed to set TAP link UID: %v", err)
-		return err
-	}
-	err = unix.IoctlSetInt(fd, unix.TUNSETGROUP, gid)
-	if err != nil {
-		log.Errorf("Failed to set TAP link GID: %v", err)
-		return err
+	log.Infof("Setting TAP link owner to UID %d and GID %d.", tapCfg.Uid, tapCfg.Gid)
+	for _, tapFd := range tapLink.Fds {
+		fd := int(tapFd.Fd())
+
+		err = unix.IoctlSetInt(fd, unix.TUNSETOWNER, tapCfg.Uid)
+		if err != nil {
+			log.Errorf("Failed to set TAP link UID: %v", err)
+			return err
+		}
+		err = unix.IoctlSetInt(fd, unix.TUNSETGROUP, tapCfg.Gid)
+		if err != nil {
+			log.Errorf("Failed to set TAP link GID: %v", err)
+			return err
+		}
+
+		tapFd.Close()
 	}
 
 	// Set TAP link operational state up.
