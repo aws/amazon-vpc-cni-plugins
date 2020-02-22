@@ -37,8 +37,14 @@ type NetConfig struct {
 	BranchGatewayIPAddress net.IP
 	BlockIMDS              bool
 	InterfaceType          string
-	Uid                    int
-	Gid                    int
+	Tap                    *TAPConfig
+}
+
+// TAPConfig defines a TAP interface configuration.
+type TAPConfig struct {
+	Uid    int
+	Gid    int
+	Queues int
 }
 
 // netConfigJSON defines the network configuration JSON file format for the vpc-branch-eni plugin.
@@ -70,6 +76,9 @@ const (
 	IfTypeVLAN    = "vlan"
 	IfTypeTAP     = "tap"
 	IfTypeMACVTAP = "macvtap"
+
+	// Default number of queues to use with TAP interfaces.
+	defaultTapQueues = 1
 
 	// Whether the plugin ignores unknown per-container arguments.
 	ignoreUnknown = true
@@ -171,17 +180,23 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	}
 
 	// Parse the TAP interface owner UID and GID.
-	if config.Uid != "" {
-		netConfig.Uid, err = strconv.Atoi(config.Uid)
-		if err != nil {
-			return nil, fmt.Errorf("invalid uid %s", config.Uid)
+	if config.InterfaceType == IfTypeTAP {
+		netConfig.Tap = &TAPConfig{
+			Queues: defaultTapQueues,
 		}
-	}
 
-	if config.Gid != "" {
-		netConfig.Gid, err = strconv.Atoi(config.Gid)
-		if err != nil {
-			return nil, fmt.Errorf("invalid gid %s", config.Gid)
+		if config.Uid != "" {
+			netConfig.Tap.Uid, err = strconv.Atoi(config.Uid)
+			if err != nil {
+				return nil, fmt.Errorf("invalid uid %s", config.Uid)
+			}
+		}
+
+		if config.Gid != "" {
+			netConfig.Tap.Gid, err = strconv.Atoi(config.Gid)
+			if err != nil {
+				return nil, fmt.Errorf("invalid gid %s", config.Gid)
+			}
 		}
 	}
 
