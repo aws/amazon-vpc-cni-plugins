@@ -30,31 +30,39 @@ type config struct {
 
 var (
 	validConfigs = []config{
-		config{
-			netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/16", "branchGatewayIPAddress":"10.11.0.1", "uid":"42", "gid":"42"}`,
+		config{ // All required fields in netconfig.
+			netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/16", "uid":"42", "gid":"42"}`,
 			pcArgs:    "",
 		},
-		config{
+		config{ // All required network fields in netconfig and branch fields in per-container args.
+			netConfig: `{"trunkName":"eth1", "uid":"42", "gid":"42"}`,
+			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
+		},
+		config{ // TrunkMACAddress instead of TrunkName.
 			netConfig: `{"trunkMACAddress":"42:42:42:42:42:42", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14", "uid":"42", "gid":"42"}`,
 			pcArgs:    "",
 		},
-		config{
-			netConfig: `{"trunkMACAddress":"42:42:42:42:42:42", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14", "blockInstanceMetadata":true, "uid":"42", "gid":"42"}`,
-			pcArgs:    "",
+		config{ // With optional fields.
+			netConfig: `{"trunkMACAddress":"42:42:42:42:42:42", "blockInstanceMetadata":true, "interfaceType":"tap", "uid":"42", "gid":"42"}`,
+			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/24;BranchGatewayIPAddress=192.168.1.1",
 		},
-		config{
-			netConfig: `{"trunkName":"eth1", "uid":"42", "gid":"42"}`,
+		config{ // VLAN interface with no TAP UID or GID.
+			netConfig: `{"trunkName":"eth1", "interfaceType": "vlan"}`,
 			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
 		},
 	}
 
 	invalidConfigs = []config{
-		config{
-			netConfig: `{"trunkName":"eth1"}`,
-			pcArgs:    "BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1/16",
+		config{ // invalid branch IP address.
+			netConfig: `{"trunkName":"eth1", "uid":"42", "gid":"42"}`,
+			pcArgs:    "BranchVlanID=100;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1/16",
 		},
-		config{
-			netConfig: `{"trunkName":"eth1"}`,
+		config{ // missing branch VLAN ID.
+			netConfig: `{"trunkName":"eth1", "uid":"42", "gid":"42"}`,
+			pcArgs:    "BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
+		},
+		config{ // missing TAP UID and GID.
+			netConfig: `{"trunkName":"eth1", "branchVlanID":"100", "interfaceType":"tap"}`,
 			pcArgs:    "BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
 		},
 	}
@@ -74,7 +82,6 @@ func TestValidConfigs(t *testing.T) {
 
 // TestInvalidConfigs tests that invalid configs fail.
 func TestInvalidConfigs(t *testing.T) {
-	// Test all invalid configs.
 	for _, config := range invalidConfigs {
 		args := &skel.CmdArgs{
 			StdinData: []byte(config.netConfig),
