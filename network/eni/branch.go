@@ -18,6 +18,7 @@ package eni
 import (
 	"fmt"
 	"net"
+	"os"
 
 	log "github.com/cihub/seelog"
 	"github.com/vishvananda/netlink"
@@ -68,9 +69,14 @@ func (branch *Branch) AttachToLink(setMACAddress bool) error {
 
 	vlanLink := &netlink.Vlan{LinkAttrs: la, VlanId: branch.isolationID}
 
-	log.Infof("Creating vlan link for branch [%s]: %+v", branch.linkName, vlanLink)
-	if err := netlink.LinkAdd(vlanLink); err != nil {
-		log.Errorf("Failed to add vlan link for branch [%s]: %v", branch.linkName, err)
+	log.Infof("Creating VLAN link for branch %s: %+v", branch.linkName, vlanLink)
+	err := netlink.LinkAdd(vlanLink)
+	if err != nil {
+		if os.IsExist(err) {
+			log.Infof("Found existing VLAN link for branch %s.", branch.linkName)
+		} else {
+			log.Errorf("Failed to add VLAN link for branch %s: %v", branch.linkName, err)
+		}
 		return err
 	}
 
@@ -86,10 +92,10 @@ func (branch *Branch) DetachFromLink() error {
 	la.ParentIndex = branch.trunk.linkIndex
 	vlanLink := &netlink.Vlan{LinkAttrs: la, VlanId: branch.isolationID}
 
-	log.Infof("Deleting vlan link for branch [%s]: %+v", branch.linkName, vlanLink)
+	log.Infof("Deleting VLAN link for branch %s: %+v", branch.linkName, vlanLink)
 	err := netlink.LinkDel(vlanLink)
 	if err != nil {
-		log.Errorf("Failed to delete vlan link for branch [%s]: %v", branch.linkName, err)
+		log.Errorf("Failed to delete VLAN link for branch %s: %v", branch.linkName, err)
 		return err
 	}
 

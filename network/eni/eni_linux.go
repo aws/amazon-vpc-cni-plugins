@@ -86,17 +86,22 @@ func (eni *ENI) SetMACAddress(address net.HardwareAddr) error {
 	return nil
 }
 
-// SetIPAddress assigns the given IP address to the ENI.
-func (eni *ENI) SetIPAddress(address *net.IPNet) error {
+// AddIPAddress assigns the given IP address to the ENI.
+func (eni *ENI) AddIPAddress(address *net.IPNet) error {
 	la := netlink.NewLinkAttrs()
 	la.Index = eni.linkIndex
 	link := &netlink.Dummy{LinkAttrs: la}
 	addr := &netlink.Addr{IPNet: address}
 
-	err := netlink.AddrAdd(link, addr)
-	if err != nil {
-		return err
-	}
+	return netlink.AddrAdd(link, addr)
+}
 
-	return nil
+// DeleteIPAddress deletes the given IP address from the ENI.
+func (eni *ENI) DeleteIPAddress(address *net.IPNet) error {
+	la := netlink.NewLinkAttrs()
+	la.Index = eni.linkIndex
+	link := &netlink.Dummy{LinkAttrs: la}
+	addr := &netlink.Addr{IPNet: address}
+
+	return netlink.AddrDel(link, addr)
 }
