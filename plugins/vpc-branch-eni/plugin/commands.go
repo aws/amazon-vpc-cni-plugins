@@ -16,6 +16,7 @@ package plugin
 import (
 	"fmt"
 	"net"
+	"os"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/aws/amazon-vpc-cni-plugins/network/imds"
@@ -83,16 +84,38 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	overrideMAC := netConfig.InterfaceType == config.IfTypeVLAN
 	err = branch.AttachToLink(overrideMAC)
 	if err != nil {
-		log.Errorf("Failed to attach branch interface %s: %v.", branchName, err)
-		return err
-	}
+		if os.IsExist(err) {
+			// If the branch link already exists, it may have been created in a previous invocation
+			// of this plugin. Look for it in the target network namespace and reset it.
+			err = ns.Run(func() error {
+				err := branch.ENI.AttachToLink()
+				if err != nil {
+					return err
+				}
 
-	// Move branch ENI to the network namespace.
-	log.Infof("Moving branch link %s to netns %s.", branch, args.Netns)
-	err = branch.SetNetNS(ns)
-	if err != nil {
-		log.Errorf("Failed to move branch link: %v.", err)
-		return err
+				if netConfig.BranchIPAddress != nil {
+					err = branch.DeleteIPAddress(netConfig.BranchIPAddress)
+					if os.IsNotExist(err) {
+						err = nil
+					} else if err != nil {
+						log.Errorf("Failed to reset branch link: %v", err)
+					}
+				}
+				return err
+			})
+		}
+		if err != nil {
+			log.Errorf("Failed to attach branch interface %s: %v.", branchName, err)
+			return err
+		}
+	} else {
+		// Move branch ENI to the network namespace.
+		log.Infof("Moving branch link %s to netns %s.", branch, args.Netns)
+		err = branch.SetNetNS(ns)
+		if err != nil {
+			log.Errorf("Failed to move branch link: %v.", err)
+			return err
+		}
 	}
 
 	// Complete the remaining setup in target network namespace.
@@ -108,7 +131,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 			// Container is running in a VM.
 			// Connect the branch ENI to a TAP link in the target network namespace.
 			bridgeName := fmt.Sprintf(bridgeNameFormat, netConfig.BranchVlanID)
-			err = plugin.createTAPLink(bridgeName, branchName, args.IfName, netConfig.Tap)
+			err = plugin.createTAPLink(branch, bridgeName, args.IfName, netConfig.Tap)
 		case config.IfTypeMACVTAP:
 			// Container is running in a VM.
 			// Connect the branch ENI to a MACVTAP link in the target network namespace.
@@ -249,16 +272,17 @@ func (plugin *Plugin) createVLANLink(
 	gatewayIPAddress net.IP) error {
 
 	// Rename the branch link to the requested interface name.
-	log.Infof("Renaming branch link %v to %s.", branch, linkName)
-	err := branch.SetLinkName(linkName)
-	if err != nil {
-		log.Errorf("Failed to rename branch link %v: %v.", branch, err)
-		return err
+	if branch.GetLinkName() != linkName {
+		log.Infof("Renaming branch link %v to %s.", branch, linkName)
+		err := branch.SetLinkName(linkName)
+		if err != nil {
+			log.Errorf("Failed to rename branch link %v: %v.", branch, err)
+			return err
+		}
 	}
 
 	// Set branch link operational state up.
-	log.Infof("Setting branch link state up.")
-	err = branch.SetOpState(true)
+	err := branch.SetOpState(true)
 	if err != nil {
 		log.Errorf("Failed to set branch link %v state: %v.", branch, err)
 		return err
@@ -268,7 +292,7 @@ func (plugin *Plugin) createVLANLink(
 	if ipAddress != nil {
 		// Assign the IP address.
 		log.Infof("Assigning IP address %v to branch link.", ipAddress)
-		err = branch.SetIPAddress(ipAddress)
+		err = branch.AddIPAddress(ipAddress)
 		if err != nil {
 			log.Errorf("Failed to assign IP address to branch link %v: %v.", branch, err)
 			return err
@@ -292,8 +316,8 @@ func (plugin *Plugin) createVLANLink(
 
 // createTAPLink creates a TAP link in the target network namespace.
 func (plugin *Plugin) createTAPLink(
+	branch *eni.Branch,
 	bridgeName string,
-	branchName string,
 	tapLinkName string,
 	tapCfg *config.TAPConfig) error {
 
@@ -316,8 +340,23 @@ func (plugin *Plugin) createTAPLink(
 		return err
 	}
 
+	// In TAP mode, the branch ENI's MAC address is used exclusively by the consumer of the TAP
+	// interface (e.g. a VM), so it shouldn't be assigned to the branch link itself. However, this
+	// can happen if the branch link is being reused between successive invocations of the plugin.
+	// Overriding the branch link's MAC address with that of the bridge prevents that.
+	bridgeLink, err := netlink.LinkByIndex(bridge.Index)
+	if err != nil {
+		log.Errorf("Failed to find bridge link: %v", err)
+		return err
+	}
+
+	err = branch.SetMACAddress(bridgeLink.Attrs().HardwareAddr)
+	if err != nil {
+		log.Errorf("Failed to set branch link MAC address: %v.", err)
+		return err
+	}
+
 	// Set bridge link operational state up.
-	log.Info("Setting bridge link state up.")
 	err = netlink.LinkSetUp(bridge)
 	if err != nil {
 		log.Errorf("Failed to set bridge link state: %v", err)
@@ -326,7 +365,7 @@ func (plugin *Plugin) createTAPLink(
 
 	// Connect branch link to the bridge.
 	la = netlink.NewLinkAttrs()
-	la.Name = branchName
+	la.Name = branch.GetLinkName()
 	branchLink := &netlink.Dummy{LinkAttrs: la}
 	err = netlink.LinkSetMaster(branchLink, bridge)
 	if err != nil {
@@ -385,7 +424,6 @@ func (plugin *Plugin) createTAPLink(
 	}
 
 	// Set TAP link operational state up.
-	log.Info("Setting TAP link state up.")
 	err = netlink.LinkSetUp(tapLink)
 	if err != nil {
 		log.Errorf("Failed to set TAP link state: %v", err)
@@ -416,7 +454,6 @@ func (plugin *Plugin) createMACVTAPLink(linkName string, parentIndex int) error 
 	}
 
 	// Set MACVTAP link operational state up.
-	log.Infof("Setting MACVTAP link state up.")
 	err = netlink.LinkSetUp(macvtapLink)
 	if err != nil {
 		log.Errorf("Failed to set MACVTAP link state: %v.", err)

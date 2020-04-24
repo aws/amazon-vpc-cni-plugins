@@ -34,5 +34,6 @@ type API interface {
 	SetOpState(up bool) error
 	SetNetNS(ns netns.NetNS) error
 	SetMACAddress(address net.HardwareAddr) error
-	SetIPAddress(address *net.IPNet) error
+	AddIPAddress(address *net.IPNet) error
+	DeleteIPAddress(address *net.IPNet) error
 }
