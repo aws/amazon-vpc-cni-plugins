@@ -106,7 +106,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 		}
 
 		for _, proto := range ipProtos {
-			err = plugin.deleteIptablesRules(proto)
+			err = plugin.deleteIptablesRules(proto, netConfig)
 			if err != nil {
 				log.Errorf("Failed to delete ip rules: %v.", err)
 				return err
@@ -130,29 +130,28 @@ func (plugin *Plugin) setupIptablesRules(
 		return err
 	}
 
-	// Create new chains
-	err = iptable.NewChain("nat", egressChain)
-	if err != nil {
-		return err
-	}
-	err = iptable.NewChain("nat", ingressChain)
+	err = plugin.setupIngressRules(iptable, config)
 	if err != nil {
 		return err
 	}
 
-	// Route everything arriving at the application port to proxy.
-	err = iptable.Append("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", config.AppPorts,
-		"-j", "REDIRECT", "--to-port", config.ProxyIngressPort)
+	err = plugin.setupEgressRules(iptable, config, egressIgnoredIPs)
 	if err != nil {
-		log.Errorf("Append rule to redirect traffic to proxyIngressPort failed: %v", err)
 		return err
 	}
 
-	// Apply ingress chain to everything non-local.
-	err = iptable.Append("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!", "--src-type",
-		"LOCAL", "-j", ingressChain)
+	return nil
+}
+
+// setupEgressRules installs iptable rules to handle egress traffic.
+func (plugin *Plugin) setupEgressRules(
+	iptable *iptables.IPTables,
+	config *config.NetConfig,
+	egressIgnoredIPs string) error {
+
+	// Create new chains.
+	err := iptable.NewChain("nat", egressChain)
 	if err != nil {
-		log.Errorf("Append rule to jump from PREROUTING to ingress chain failed: %v", err)
 		return err
 	}
 
@@ -208,27 +207,73 @@ func (plugin *Plugin) setupIptablesRules(
 	return nil
 }
 
+// setupIngressRules installs iptable rules to handle ingress traffic.
+func (plugin *Plugin) setupIngressRules(
+	iptable *iptables.IPTables,
+	config *config.NetConfig) error {
+	if config.ProxyIngressPort == "" || len(config.AppPorts) == 0 {
+		return nil
+	}
+
+	err := iptable.NewChain("nat", ingressChain)
+	if err != nil {
+		return err
+	}
+
+	// Route everything arriving at the application port to proxy.
+	err = iptable.Append("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", config.AppPorts,
+		"-j", "REDIRECT", "--to-port", config.ProxyIngressPort)
+	if err != nil {
+		log.Errorf("Append rule to redirect traffic to proxyIngressPort failed: %v", err)
+		return err
+	}
+
+	// Apply ingress chain to everything non-local.
+	err = iptable.Append("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!", "--src-type",
+		"LOCAL", "-j", ingressChain)
+	if err != nil {
+		log.Errorf("Append rule to jump from PREROUTING to ingress chain failed: %v", err)
+		return err
+	}
+
+	return nil
+}
+
 // deleteIptablesRules deletes iptables/ip6tables rules in container network namespace.
-func (plugin *Plugin) deleteIptablesRules(proto iptables.Protocol) error {
+func (plugin *Plugin) deleteIptablesRules(
+	proto iptables.Protocol,
+	config *config.NetConfig) error {
 	/// Create a new iptables session.
 	iptable, err := iptables.NewWithProtocol(proto)
 	if err != nil {
 		return err
 	}
 
-	// Delete ingress rule from iptables.
-	err = iptable.Delete("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!", "--src-type",
-		"LOCAL", "-j", ingressChain)
+	err = plugin.deleteIngressRules(iptable, config)
 	if err != nil {
-		log.Errorf("Delete the rule in PREROUTING chain failed: %v", err)
 		return err
 	}
 
-	// Delete egress rule from iptables.
-	err = iptable.Delete("nat", "OUTPUT", "-p", "tcp", "-m", "addrtype", "!", "--dst-type",
-		"LOCAL", "-j", egressChain)
+	err = plugin.deleteEgressRules(iptable)
 	if err != nil {
-		log.Errorf("Delete the rule in OUTPUT chain failed: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// deleteIngressRules deletes the iptable rules for ingress traffic.
+func (plugin *Plugin) deleteIngressRules(
+	iptable *iptables.IPTables,
+	config *config.NetConfig) error {
+	if config.ProxyIngressPort == "" {
+		return nil
+	}
+	// Delete ingress rule from iptables.
+	err := iptable.Delete("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!", "--src-type",
+		"LOCAL", "-j", ingressChain)
+	if err != nil {
+		log.Errorf("Delete the rule in PREROUTING chain failed: %v", err)
 		return err
 	}
 
@@ -241,6 +286,19 @@ func (plugin *Plugin) deleteIptablesRules(proto iptables.Protocol) error {
 	err = iptable.DeleteChain("nat", ingressChain)
 	if err != nil {
 		log.Errorf("Failed to delete chain[%v]: %v", ingressChain, err)
+		return err
+	}
+
+	return nil
+}
+
+// deleteEgressRules deletes the iptable rules for egress traffic.
+func (plugin *Plugin) deleteEgressRules(iptable *iptables.IPTables) error {
+	// Delete egress rule from iptables.
+	err := iptable.Delete("nat", "OUTPUT", "-p", "tcp", "-m", "addrtype", "!", "--dst-type",
+		"LOCAL", "-j", egressChain)
+	if err != nil {
+		log.Errorf("Delete the rule in OUTPUT chain failed: %v", err)
 		return err
 	}
 
