@@ -93,8 +93,8 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 					return err
 				}
 
-				if netConfig.BranchIPAddress != nil {
-					err = branch.DeleteIPAddress(netConfig.BranchIPAddress)
+				for _, ipAddr := range netConfig.IPAddresses {
+					err = branch.DeleteIPAddress(&ipAddr)
 					if os.IsNotExist(err) {
 						err = nil
 					} else if err != nil {
@@ -126,7 +126,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		switch netConfig.InterfaceType {
 		case config.IfTypeVLAN:
 			// Container is running in a network namespace on this host.
-			err = plugin.createVLANLink(branch, args.IfName, netConfig.BranchIPAddress, netConfig.BranchGatewayIPAddress)
+			err = plugin.createVLANLink(branch, args.IfName, netConfig.IPAddresses, netConfig.GatewayIPAddresses)
 		case config.IfTypeTAP:
 			// Container is running in a VM.
 			// Connect the branch ENI to a TAP link in the target network namespace.
@@ -268,8 +268,8 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 func (plugin *Plugin) createVLANLink(
 	branch *eni.Branch,
 	linkName string,
-	ipAddress *net.IPNet,
-	gatewayIPAddress net.IP) error {
+	ipAddresses []net.IPNet,
+	gatewayIPAddresses []net.IP) error {
 
 	// Rename the branch link to the requested interface name.
 	if branch.GetLinkName() != linkName {
@@ -288,16 +288,19 @@ func (plugin *Plugin) createVLANLink(
 		return err
 	}
 
-	// Set branch IP address and default gateway if specified.
-	if ipAddress != nil {
+	// Set branch IP addresses if specified.
+	for _, ipAddress := range ipAddresses {
 		// Assign the IP address.
 		log.Infof("Assigning IP address %v to branch link.", ipAddress)
-		err = branch.AddIPAddress(ipAddress)
+		err = branch.AddIPAddress(&ipAddress)
 		if err != nil {
 			log.Errorf("Failed to assign IP address to branch link %v: %v.", branch, err)
 			return err
 		}
+	}
 
+	// Set default gateways if specified.
+	for _, gatewayIPAddress := range gatewayIPAddresses {
 		// Add default route via branch link.
 		route := &netlink.Route{
 			Gw:        gatewayIPAddress,

@@ -16,7 +16,6 @@
 package config
 
 import (
-	"net"
 	"testing"
 
 	"github.com/containernetworking/cni/pkg/skel"
@@ -31,39 +30,47 @@ type config struct {
 var (
 	validConfigs = []config{
 		config{ // All required fields in netconfig.
-			netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/16", "uid":"42", "gid":"42"}`,
+			netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "ipAddresses":["10.11.12.13/16"], "uid":"42", "gid":"42"}`,
 			pcArgs:    "",
 		},
 		config{ // All required network fields in netconfig and branch fields in per-container args.
 			netConfig: `{"trunkName":"eth1", "uid":"42", "gid":"42"}`,
-			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
+			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;IPAddresses=192.168.1.2/16",
 		},
 		config{ // TrunkMACAddress instead of TrunkName.
-			netConfig: `{"trunkMACAddress":"42:42:42:42:42:42", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14", "uid":"42", "gid":"42"}`,
+			netConfig: `{"trunkMACAddress":"42:42:42:42:42:42", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "ipAddresses":["10.11.12.13/14"], "uid":"42", "gid":"42"}`,
 			pcArgs:    "",
+		},
+		config{ // With multiple IP addresses.
+			netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "ipAddresses":["10.11.12.13/16", "2001:1234::4/64"], "uid":"42", "gid":"42"}`,
+			pcArgs:    "",
+		},
+		config{ // With multiple IP addresses in per-container args.
+			netConfig: `{"trunkName":"eth0", "uid":"42", "gid":"42"}`,
+			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;IPAddresses=192.168.1.2/16,2001:1234::4/64;GatewayIPAddresses=192.168.1.1",
 		},
 		config{ // With optional fields.
 			netConfig: `{"trunkMACAddress":"42:42:42:42:42:42", "blockInstanceMetadata":true, "interfaceType":"tap", "uid":"42", "gid":"42"}`,
-			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/24;BranchGatewayIPAddress=192.168.1.1",
+			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;IPAddresses=192.168.1.2/24;GatewayIPAddresses=192.168.1.1",
 		},
-		config{ // VLAN interface with no TAP UID or GID.
+		config{ // VLAN interface.
 			netConfig: `{"trunkName":"eth1", "interfaceType": "vlan"}`,
-			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
+			pcArgs:    "BranchVlanID=10;BranchMACAddress=10:20:30:40:50:60;IPAddresses=192.168.1.2/16",
 		},
 	}
 
 	invalidConfigs = []config{
 		config{ // invalid branch IP address.
 			netConfig: `{"trunkName":"eth1", "uid":"42", "gid":"42"}`,
-			pcArgs:    "BranchVlanID=100;BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1/16",
+			pcArgs:    "BranchVlanID=100;BranchMACAddress=10:20:30:40:50:60;IPAddresses=192.168.1/16",
 		},
 		config{ // missing branch VLAN ID.
 			netConfig: `{"trunkName":"eth1", "uid":"42", "gid":"42"}`,
-			pcArgs:    "BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
+			pcArgs:    "BranchMACAddress=10:20:30:40:50:60;IPAddresses=192.168.1.2/16",
 		},
 		config{ // missing TAP UID and GID.
 			netConfig: `{"trunkName":"eth1", "branchVlanID":"100", "interfaceType":"tap"}`,
-			pcArgs:    "BranchMACAddress=10:20:30:40:50:60;BranchIPAddress=192.168.1.2/16",
+			pcArgs:    "BranchMACAddress=10:20:30:40:50:60;IPAddresses=192.168.1.2/16",
 		},
 	}
 )
@@ -95,8 +102,8 @@ func TestInvalidConfigs(t *testing.T) {
 // TestPerContainerArgsOverrideNetConfig tests that per-container args override per-network args.
 func TestPerContainerArgsOverrideNetConfig(t *testing.T) {
 	c := config{
-		netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "branchIPAddress":"10.11.12.13/14", "uid":"42", "gid":"42"}`,
-		pcArgs:    "BranchVlanID=42;BranchMACAddress=44:44:44:55:55:55;BranchIPAddress=192.168.1.2/16",
+		netConfig: `{"trunkName":"eth0", "branchVlanID":"100", "branchMACAddress":"01:23:45:67:89:ab", "ipAddresses":["10.11.12.13/14"], "uid":"42", "gid":"42"}`,
+		pcArgs:    "BranchVlanID=42;BranchMACAddress=44:44:44:55:55:55;IPAddresses=192.168.1.2/16,2001:1234::4/64;GatewayIPAddresses=192.168.1.1,2001:1234::1",
 	}
 
 	args := &skel.CmdArgs{
@@ -108,27 +115,12 @@ func TestPerContainerArgsOverrideNetConfig(t *testing.T) {
 
 	assert.Equal(t, 42, nc.BranchVlanID, "invalid vlanid")
 	assert.Equal(t, "44:44:44:55:55:55", nc.BranchMACAddress.String(), "invalid macaddress")
-	assert.Equal(t, "192.168.1.2/16", nc.BranchIPAddress.String(), "invalid ipaddress")
-}
 
-func TestGetGatewayIPAddress(t *testing.T) {
-	_, ipv4Net, err := net.ParseCIDR("172.31.16.3/20")
-	assert.NoError(t, err)
+	assert.Equal(t, 2, len(nc.IPAddresses), "invalid number of ipaddresses")
+	assert.Equal(t, "192.168.1.2/16", nc.IPAddresses[0].String(), "invalid ipaddresses")
+	assert.Equal(t, "2001:1234::4/64", nc.IPAddresses[1].String(), "invalid ipaddresses")
 
-	expectedGatewayIPAddress := net.ParseIP("172.31.16.2")
-
-	outputGatewayIPAddress, err := getGatewayIPAddress(ipv4Net, "172.31.16.2")
-	assert.NoError(t, err)
-	assert.Equal(t, expectedGatewayIPAddress, outputGatewayIPAddress)
-}
-
-func TestGetGatewayIPAddressFromSubnet(t *testing.T) {
-	_, ipv4Net, err := net.ParseCIDR("172.31.16.3/20")
-	assert.NoError(t, err)
-
-	expectedGatewayIPAddress := net.ParseIP("172.31.16.1")
-
-	outputGatewayIPAddress, err := getGatewayIPAddress(ipv4Net, "")
-	assert.NoError(t, err)
-	assert.Equal(t, expectedGatewayIPAddress, outputGatewayIPAddress)
+	assert.Equal(t, 2, len(nc.GatewayIPAddresses), "invalid number of gatewayipaddresses")
+	assert.Equal(t, "192.168.1.1", nc.GatewayIPAddresses[0].String(), "invalid gatewayipaddresses")
+	assert.Equal(t, "2001:1234::1", nc.GatewayIPAddresses[1].String(), "invalid gatewayipaddresses")
 }

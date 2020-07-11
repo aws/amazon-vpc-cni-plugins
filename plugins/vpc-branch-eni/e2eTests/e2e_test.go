@@ -29,28 +29,28 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
-	"golang.org/x/sys/unix"
 )
 
 const (
-	containerID            = "container_1"
-	ifName                 = "testIf"
-	nsName                 = "testNS"
-	trunkMACAddress        = "02:71:ca:81:41:1e"
-	trunkName              = "eth1"
-	branchVlanID           = "101"
-	branchMACAddress       = "02:e1:48:75:86:a4"
-	branchIPAddress        = "172.31.19.6/20"
-	branchGatewayIPAddress = "172.31.16.1"
-	netConfJsonFmt         = `
+	containerID        = "container_1"
+	ifName             = "testIf"
+	nsName             = "testNS"
+	trunkName          = "eth1"
+	branchVlanID       = "101"
+	branchMACAddress   = "02:e1:48:75:86:a4"
+	branchIPv4Address  = "172.31.19.6/20"
+	branchIPv6Address  = "2600:1f13:4d9:e602:6aea:cdb1:2b2b:8d62/64"
+	gatewayIPv4Address = "172.31.16.1"
+	gatewayIPv6Address = "2600:1f13:4d9:e602::1234"
+	netConfJsonFmt     = `
 {
 	"type": "vpc-branch-eni",
 	"cniVersion":"0.3.0",
-	"trunkMACAddress": "%s",
+	"trunkName": "%s",
 	"branchVlanID": "%s",
 	"branchMACAddress": "%s",
-	"branchIPAddress": "%s",
-	"branchGatewayIPAddress": "%s",
+	"ipAddresses": ["%s","%s"],
+	"gatewayIPAddresses": ["%s","%s"],
 	"interfaceType": "vlan"
 }
 `
@@ -58,11 +58,11 @@ const (
 {
 	"type": "vpc-branch-eni",
 	"cniVersion":"0.3.0",
-	"trunkMACAddress": "%s",
+	"trunkName": "%s",
 	"branchVlanID": "%s",
 	"branchMACAddress": "%s",
-	"branchIPAddress": "%s",
-	"branchGatewayIPAddress": "%s",
+	"ipAddresses": ["%s","%s"],
+	"gatewayIPAddresses": ["%s","%s"],
 	"interfaceType": "vlan",
 	"blockInstanceMetadata": true
 }
@@ -132,8 +132,8 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 		Path:        os.Getenv("CNI_PATH"),
 	}
 
-	netConfJson := fmt.Sprintf(netConfJsonFmt, trunkMACAddress, branchVlanID, branchMACAddress,
-		branchIPAddress, branchGatewayIPAddress)
+	netConfJson := fmt.Sprintf(netConfJsonFmt, trunkName, branchVlanID, branchMACAddress,
+		branchIPv4Address, branchIPv6Address, gatewayIPv4Address, gatewayIPv6Address)
 	netConf := []byte(netConfJson)
 
 	// Execute the "ADD" command for the plugin.
@@ -179,10 +179,13 @@ func validateAfterAdd(t *testing.T) {
 	assert.Equal(t, "up", branchAttrs.OperState.String())
 	assert.Equal(t, branchMACAddress, branchAttrs.HardwareAddr.String())
 
-	// Check default route.
-	routes, err := netlink.RouteList(branch, unix.NETLINK_ROUTE)
-	assert.Equal(t, branchGatewayIPAddress, routes[0].Gw.String())
-	assert.Equal(t, branchAttrs.Index, routes[0].LinkIndex)
+	// Check IP addresses.
+	validateIPAddress(t, branch, netlink.FAMILY_V4, branchIPv4Address)
+	validateIPAddress(t, branch, netlink.FAMILY_V6, branchIPv6Address)
+
+	// Check default routes.
+	validateDefaultRoute(t, branch, netlink.FAMILY_V4, gatewayIPv4Address)
+	validateDefaultRoute(t, branch, netlink.FAMILY_V6, gatewayIPv6Address)
 }
 
 func validateAfterAddBlockIMDS(t *testing.T) {
@@ -209,4 +212,33 @@ func getEnvOrDefault(name string, defaultValue string) string {
 	}
 
 	return val
+}
+
+// validateIPAddress validates that the link has the given IP address.
+func validateIPAddress(t *testing.T, link netlink.Link, family int, ipAddress string) {
+	addrs, err := netlink.AddrList(link, family)
+	require.NoError(t, err)
+
+	for _, a := range addrs {
+		if a.IPNet.String() == ipAddress {
+			return
+		}
+	}
+
+	assert.NoError(t, fmt.Errorf("IP address %s not found", ipAddress))
+}
+
+// validateDefaultRoute validates that the link has a default route to the given gateway IP address.
+func validateDefaultRoute(t *testing.T, link netlink.Link, family int, gatewayIPAddress string) {
+	routes, err := netlink.RouteList(link, family)
+	require.NoError(t, err)
+
+	for _, r := range routes {
+		if r.Dst == nil && r.Gw != nil {
+			assert.Equal(t, gatewayIPAddress, r.Gw.String())
+			return
+		}
+	}
+
+	assert.NoError(t, fmt.Errorf("Default route to gateway %s not found", gatewayIPAddress))
 }

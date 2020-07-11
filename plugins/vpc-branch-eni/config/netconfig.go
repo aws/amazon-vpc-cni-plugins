@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
@@ -29,15 +30,15 @@ import (
 // NetConfig defines the network configuration for the vpc-branch-eni plugin.
 type NetConfig struct {
 	cniTypes.NetConf
-	TrunkName              string
-	TrunkMACAddress        net.HardwareAddr
-	BranchVlanID           int
-	BranchMACAddress       net.HardwareAddr
-	BranchIPAddress        *net.IPNet
-	BranchGatewayIPAddress net.IP
-	BlockIMDS              bool
-	InterfaceType          string
-	Tap                    *TAPConfig
+	TrunkName          string
+	TrunkMACAddress    net.HardwareAddr
+	BranchVlanID       int
+	BranchMACAddress   net.HardwareAddr
+	IPAddresses        []net.IPNet
+	GatewayIPAddresses []net.IP
+	BlockIMDS          bool
+	InterfaceType      string
+	Tap                *TAPConfig
 }
 
 // TAPConfig defines a TAP interface configuration.
@@ -50,25 +51,25 @@ type TAPConfig struct {
 // netConfigJSON defines the network configuration JSON file format for the vpc-branch-eni plugin.
 type netConfigJSON struct {
 	cniTypes.NetConf
-	TrunkName              string `json:"trunkName"`
-	TrunkMACAddress        string `json:"trunkMACAddress"`
-	BranchVlanID           string `json:"branchVlanID"`
-	BranchMACAddress       string `json:"branchMACAddress"`
-	BranchIPAddress        string `json:"branchIPAddress"`
-	BranchGatewayIPAddress string `json:"branchGatewayIPAddress"`
-	BlockIMDS              bool   `json:"blockInstanceMetadata"`
-	InterfaceType          string `json:"interfaceType"`
-	Uid                    string `json:"uid"`
-	Gid                    string `json:"gid"`
+	TrunkName          string   `json:"trunkName"`
+	TrunkMACAddress    string   `json:"trunkMACAddress"`
+	BranchVlanID       string   `json:"branchVlanID"`
+	BranchMACAddress   string   `json:"branchMACAddress"`
+	IPAddresses        []string `json:"ipAddresses"`
+	GatewayIPAddresses []string `json:"gatewayIPAddresses"`
+	BlockIMDS          bool     `json:"blockInstanceMetadata"`
+	InterfaceType      string   `json:"interfaceType"`
+	Uid                string   `json:"uid"`
+	Gid                string   `json:"gid"`
 }
 
 // pcArgs defines the per-container arguments passed in CNI_ARGS environment variable.
 type pcArgs struct {
 	cniTypes.CommonArgs
-	BranchVlanID           cniTypes.UnmarshallableString
-	BranchMACAddress       cniTypes.UnmarshallableString
-	BranchIPAddress        cniTypes.UnmarshallableString
-	BranchGatewayIPAddress cniTypes.UnmarshallableString
+	BranchVlanID       cniTypes.UnmarshallableString
+	BranchMACAddress   cniTypes.UnmarshallableString
+	IPAddresses        cniTypes.UnmarshallableString
+	GatewayIPAddresses cniTypes.UnmarshallableString
 }
 
 const (
@@ -109,11 +110,11 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		if pca.BranchMACAddress != "" {
 			config.BranchMACAddress = string(pca.BranchMACAddress)
 		}
-		if pca.BranchIPAddress != "" {
-			config.BranchIPAddress = string(pca.BranchIPAddress)
+		if pca.IPAddresses != "" {
+			config.IPAddresses = strings.Split(string(pca.IPAddresses), ",")
 		}
-		if pca.BranchGatewayIPAddress != "" {
-			config.BranchGatewayIPAddress = string(pca.BranchGatewayIPAddress)
+		if pca.GatewayIPAddresses != "" {
+			config.GatewayIPAddresses = strings.Split(string(pca.GatewayIPAddresses), ",")
 		}
 	}
 
@@ -171,12 +172,23 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		return nil, fmt.Errorf("invalid branchMACAddress %s", config.BranchMACAddress)
 	}
 
-	// Parse the optional branch IP address.
-	if config.BranchIPAddress != "" {
-		netConfig.BranchIPAddress, err = vpc.GetIPAddressFromString(config.BranchIPAddress)
+	// Parse branch IP addresses. These can be IPv4 or IPv6 addresses and are optional for some
+	// setups like TAP interfaces where the IP addresses are assigned through other means.
+	for _, s := range config.IPAddresses {
+		addr, err := vpc.GetIPAddressFromString(s)
 		if err != nil {
-			return nil, fmt.Errorf("invalid branchIPAddress %s", config.BranchIPAddress)
+			return nil, fmt.Errorf("invalid ipAddress %s", s)
 		}
+		netConfig.IPAddresses = append(netConfig.IPAddresses, *addr)
+	}
+
+	// Parse optional gateway IP addresses.
+	for _, s := range config.GatewayIPAddresses {
+		addr := net.ParseIP(s)
+		if addr == nil {
+			return nil, fmt.Errorf("invalid gatewayIPAddress %s", s)
+		}
+		netConfig.GatewayIPAddresses = append(netConfig.GatewayIPAddresses, addr)
 	}
 
 	// Parse the TAP interface owner UID and GID.
@@ -200,44 +212,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		}
 	}
 
-	// Compute the optional gateway IP address.
-	netConfig.BranchGatewayIPAddress, err =
-		getGatewayIPAddress(netConfig.BranchIPAddress, config.BranchGatewayIPAddress)
-	if err != nil {
-		return nil, err
-	}
-
 	// Validation complete. Return the parsed NetConfig object.
 	log.Debugf("Created NetConfig: %+v", netConfig)
 	return &netConfig, nil
-}
-
-func getGatewayIPAddress(ipAddress *net.IPNet, gatewayIPAddressString string) (net.IP, error) {
-	var gatewayIPAddress net.IP
-
-	// If an explicit gateway IP address is provided, use it.
-	if gatewayIPAddressString != "" {
-		gatewayIPAddress = net.ParseIP(gatewayIPAddressString)
-		if gatewayIPAddress == nil {
-			return nil, fmt.Errorf("invalid branchGatewayIPAddress %s", gatewayIPAddressString)
-		}
-
-		return gatewayIPAddress, nil
-	}
-
-	// If neither gateway IP address nor container IP address is provided, cannot compute a gateway
-	// IP address, so just leave it as nil.
-	if ipAddress == nil {
-		return nil, nil
-	}
-
-	// Otherwise, infer the gateway IP address from the subnet that the container IP address is in.
-	subnet, err := vpc.NewSubnet(vpc.GetSubnetPrefix(ipAddress))
-	if err != nil {
-		log.Errorf("Failed to parse VPC subnet for %s: %v.", ipAddress, err)
-		return nil, err
-	}
-
-	gatewayIPAddress = subnet.Gateways[0]
-	return gatewayIPAddress, nil
 }
