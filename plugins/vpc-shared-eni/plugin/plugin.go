@@ -14,6 +14,7 @@
 package plugin
 
 import (
+	"github.com/aws/amazon-vpc-cni-plugins/capabilities"
 	"github.com/aws/amazon-vpc-cni-plugins/cni"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/network"
 
@@ -50,6 +51,9 @@ func NewPlugin() (*Plugin, error) {
 	}
 
 	plugin.nb = &network.BridgeBuilder{}
+
+	// Capabilities for vpc-shared-eni includes awsvpc-network-mode.
+	plugin.Capability = capabilities.New(capabilities.TaskENICapability)
 
 	return plugin, nil
 }

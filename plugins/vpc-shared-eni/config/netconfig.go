@@ -40,6 +40,7 @@ type NetConfig struct {
 	GatewayIPAddress net.IP
 	InterfaceType    string
 	TapUserID        int
+	TaskENI          bool
 	Kubernetes       KubernetesConfig
 }
 
@@ -57,6 +58,7 @@ type netConfigJSON struct {
 	InterfaceType    string   `json:"interfaceType"`
 	TapUserID        string   `json:"tapUserID"`
 	ServiceCIDR      string   `json:"serviceCIDR"`
+	TaskENI          bool     `json:"taskENI"`
 }
 
 const (
@@ -107,6 +109,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		BridgeType:      config.BridgeType,
 		BridgeNetNSPath: config.BridgeNetNSPath,
 		InterfaceType:   config.InterfaceType,
+		TaskENI:         config.TaskENI,
 		Kubernetes: KubernetesConfig{
 			ServiceCIDR: config.ServiceCIDR,
 		},
