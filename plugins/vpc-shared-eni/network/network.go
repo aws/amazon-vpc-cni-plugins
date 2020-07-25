@@ -16,6 +16,8 @@ package network
 import (
 	"net"
 
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/config"
+
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 )
 
@@ -40,6 +42,7 @@ type Network struct {
 	DNSServers          []string
 	DNSSuffixSearchList []string
 	ServiceCIDR         string
+	TaskENIConfig       config.TaskENIConfig
 }
 
 // Endpoint represents a container network interface.

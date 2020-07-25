@@ -19,6 +19,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/aws/amazon-vpc-cni-plugins/network/routeutils"
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
 	"github.com/Microsoft/hcsshim"
@@ -34,6 +35,9 @@ const (
 
 	// hnsEndpointNameFormat is the format of the names generated for HNS endpoints.
 	hnsEndpointNameFormat = "cid-%s"
+
+	// mask represents a /32 mask
+	mask = "255.255.255.255"
 )
 
 var (
@@ -262,6 +266,18 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 
 	// Return network interface MAC address.
 	ep.MACAddress, _ = net.ParseMAC(hnsResponse.MacAddress)
+
+	// For task-networking, we need to remove the stale route entries from the routing table of default host compartment
+	// Route deletion is idempotent. The error is returned only when the route deletion command itself cannot be executed.
+	// In all other cases, if the route is present then it will be deleted else nothing happens.
+	if nw.TaskENIConfig.PauseContainer {
+		mask := net.ParseIP(mask)
+		err := routeutils.New().DeleteRoute(&ep.IPAddress.IP, &mask, nil)
+		if err != nil {
+			log.Errorf("Failed to delete stale route entries: %v", err)
+			return err
+		}
+	}
 
 	return nil
 }

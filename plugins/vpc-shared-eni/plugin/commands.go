@@ -65,6 +65,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		DNSServers:          netConfig.DNS.Nameservers,
 		DNSSuffixSearchList: netConfig.DNS.Search,
 		ServiceCIDR:         netConfig.Kubernetes.ServiceCIDR,
+		TaskENIConfig:       netConfig.TaskENIConfig,
 	}
 
 	err = nb.FindOrCreateNetwork(&nw)
@@ -170,8 +171,8 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	}
 
 	// We delete the network along with endpoint for task networking. However, on EKS, we only delete the endpoint.
-	// TaskENI is used to check if the plugin is executed for task networking.
-	if netConfig.TaskENI {
+	// TaskENIConfig is used to check if the plugin is executed for task networking.
+	if netConfig.TaskENIConfig.PauseContainer {
 		err = nb.DeleteNetwork(&nw)
 		if err != nil {
 			// DEL is best-effort. Log and ignore the failure.
