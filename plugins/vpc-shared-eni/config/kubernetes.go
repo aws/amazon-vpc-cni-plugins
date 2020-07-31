@@ -49,8 +49,8 @@ var (
 	retrievePodConfigHandler func(netConfig *NetConfig) error
 )
 
-// parseKubernetesArgs parses Kubernetes-specific CNI arguments.
-func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs) error {
+// ParseKubernetesArgs parses Kubernetes-specific CNI arguments.
+func ParseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs) error {
 	if args == nil || args.Args == "" {
 		return nil
 	}
