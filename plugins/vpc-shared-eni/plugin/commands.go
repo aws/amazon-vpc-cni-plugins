@@ -14,9 +14,6 @@
 package plugin
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/config"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/network"
@@ -34,17 +31,6 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	if err != nil {
 		log.Errorf("Failed to parse netconfig from args: %v.", err)
 		return err
-	}
-
-	// Parse orchestrator-specific configuration.
-	if strings.Contains(args.Args, "K8S") {
-		err = config.ParseKubernetesArgs(netConfig, args)
-		if err != nil {
-			err := fmt.Errorf("failed to find the IP Address from Pod Object %s/%s: %v",
-			netConfig.Kubernetes.Namespace, netConfig.Kubernetes.PodName, err)
-			log.Error(err)
-			return err
-		}
 	}
 
 	log.Infof("Executing ADD with netconfig: %+v ContainerID:%v Netns:%v IfName:%v Args:%v.",
@@ -174,6 +160,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 		IfName:      args.IfName,
 		IfType:      netConfig.InterfaceType,
 		TapUserID:   netConfig.TapUserID,
+		IPAddress:   netConfig.IPAddress,
 	}
 
 	err = nb.DeleteEndpoint(&nw, &ep)
