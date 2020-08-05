@@ -27,7 +27,7 @@ import (
 // Add is the CNI ADD command handler.
 func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	// Parse network configuration.
-	netConfig, err := config.New(args)
+	netConfig, err := config.New(args, true)
 	if err != nil {
 		log.Errorf("Failed to parse netconfig from args: %v.", err)
 		return err
@@ -121,7 +121,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 // Del is the CNI DEL command handler.
 func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	// Parse network configuration.
-	netConfig, err := config.New(args)
+	netConfig, err := config.New(args, false)
 	if err != nil {
 		log.Errorf("Failed to parse netconfig from args: %v.", err)
 		return err

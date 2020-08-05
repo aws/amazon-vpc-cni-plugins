@@ -50,8 +50,11 @@ var (
 )
 
 // parseKubernetesArgs parses Kubernetes-specific CNI arguments.
-func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs) error {
-	if args == nil || args.Args == "" {
+func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs, isAddCmd bool) error {
+	// The only additional information we need to query from API server is the pod IP address,
+	// which is required only for ADD commands. Also the API server may have deleted the pod
+	// object already in the DEL path.
+	if !isAddCmd ||  args == nil || args.Args == "" {
 		return nil
 	}
 
