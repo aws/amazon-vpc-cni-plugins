@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"strings"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
@@ -170,14 +169,6 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		netConfig.TapUserID, err = strconv.Atoi(config.TapUserID)
 		if err != nil {
 			return nil, fmt.Errorf("invalid TapUserID %s", config.TapUserID)
-		}
-	}
-
-	// Parse orchestrator-specific configuration.
-	if strings.Contains(args.Args, "K8S") {
-		err = parseKubernetesArgs(&netConfig, args)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse Kubernetes args: %v", err)
 		}
 	}
 
