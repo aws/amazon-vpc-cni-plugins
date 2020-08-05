@@ -74,7 +74,7 @@ const (
 )
 
 // New creates a new NetConfig object by parsing the given CNI arguments.
-func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
+func New(args *cniSkel.CmdArgs, isAddCmd bool) (*NetConfig, error) {
 	// Parse network configuration.
 	var config netConfigJSON
 	err := json.Unmarshal(args.StdinData, &config)
@@ -175,7 +175,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 
 	// Parse orchestrator-specific configuration.
 	if strings.Contains(args.Args, "K8S") {
-		err = parseKubernetesArgs(&netConfig, args)
+		err = parseKubernetesArgs(&netConfig, args, isAddCmd)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse Kubernetes args: %v", err)
 		}
