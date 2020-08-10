@@ -284,7 +284,7 @@ func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
 	// Detach the HNS endpoint from the container's network namespace.
 	log.Infof("Detaching HNS endpoint %s from container %s netns.", hnsEndpoint.Id, ep.ContainerID)
 	err = hcsshim.HotDetachEndpoint(ep.ContainerID, hnsEndpoint.Id)
-	if err != nil {
+	if err != nil && err != hcsshim.ErrComputeSystemDoesNotExist {
 		return err
 	}
 
