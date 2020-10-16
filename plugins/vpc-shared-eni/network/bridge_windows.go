@@ -22,6 +22,8 @@ import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
 	"github.com/Microsoft/hcsshim"
+	"github.com/Microsoft/hcsshim/hcn"
+
 	log "github.com/cihub/seelog"
 )
 
@@ -127,6 +129,10 @@ func (nb *BridgeBuilder) DeleteNetwork(nw *Network) error {
 
 // FindOrCreateEndpoint creates a new HNS endpoint in the network.
 func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
+	if nw.TaskENIConfig.NoInfra {
+		return nb.findOrCreateEndpointNS(nw, ep)
+	}
+
 	// Query the infrastructure container ID.
 	isInfraContainer, infraContainerID, err := nb.getInfraContainerID(ep)
 	if err != nil {
@@ -266,6 +272,78 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	return nil
 }
 
+// findOrCreateEndpointNS creates a new HNS endpoint in the namespace.
+func (nb *BridgeBuilder) findOrCreateEndpointNS(nw *Network, ep *Endpoint) error {
+	// Check if the endpoint already exists.
+	endpointName := nb.generateHNSEndpointName(ep, ep.NetNSName)
+	hnsEndpoint, err := hcsshim.GetHNSEndpointByName(endpointName)
+	if err == nil {
+		log.Infof("Found existing HNS endpoint %s, adding to ns: %s", endpointName, ep.NetNSName)
+		err = nb.addNamespaceEndpoint(hnsEndpoint, ep.NetNSName)
+
+		ep.MACAddress, _ = net.ParseMAC(hnsEndpoint.MacAddress)
+		return err
+	}
+
+	// Initialize the HNS endpoint.
+	hnsEndpoint = &hcsshim.HNSEndpoint{
+		Name:               endpointName,
+		VirtualNetworkName: nb.generateHNSNetworkName(nw),
+		DNSServerList:      strings.Join(nw.DNSServers, ","),
+		GatewayAddress:     nw.GatewayIPAddress.String(), // FIXME
+		IPAddress:          ep.IPAddress.IP,
+	}
+
+	// Attach policies
+	err = nb.addEndpointPolicy(
+		hnsEndpoint,
+		hnsRoutePolicy{
+			Policy:            hcsshim.Policy{Type: hcsshim.Route},
+			DestinationPrefix: ep.IPAddress.IP.String() + "/32",
+			NeedEncap:         true,
+		})
+	if err != nil {
+		log.Errorf("Failed to add endpoint route policy: %v.", err)
+		return err
+	}
+
+	err = nb.addEndpointPolicy(
+		hnsEndpoint,
+		hnsRoutePolicy{
+			Policy:            hcsshim.Policy{Type: hcsshim.OutboundNat},
+		})
+	if err != nil {
+		log.Errorf("Failed to add OutboundNat policy: %v.", err)
+		return err
+	}
+
+	hnsResponse, err := hnsEndpoint.Create()
+	if err != nil {
+		log.Errorf("Failed to create HNS endpoint: %v.", err)
+		return err
+	}
+
+	log.Infof("Received HNS endpoint response: %+v.", hnsResponse)
+
+	// Move the HNS endpoint to the namespace.
+	err = nb.addNamespaceEndpoint(hnsResponse, ep.NetNSName)
+	if err != nil {
+		// Cleanup the failed endpoint.
+		log.Infof("Deleting the failed HNS endpoint %s.", hnsResponse.Id)
+		_, delErr := hcsshim.HNSEndpointRequest("DELETE", hnsResponse.Id, "")
+		if delErr != nil {
+			log.Errorf("Failed to delete HNS endpoint: %v.", delErr)
+		}
+
+		return err
+	}
+
+	// Return network interface MAC address.
+	ep.MACAddress, _ = net.ParseMAC(hnsResponse.MacAddress)
+
+	return nil
+}
+
 // DeleteEndpoint deletes an existing HNS endpoint.
 func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
 	// Query the infrastructure container ID.
@@ -314,6 +392,26 @@ func (nb *BridgeBuilder) attachEndpoint(ep *hcsshim.HNSEndpoint, containerID str
 	}
 
 	return err
+}
+
+// addNamespaceEndpoint adds an HNS endpoint to a namespace.
+func (nb *BridgeBuilder) addNamespaceEndpoint(ep *hcsshim.HNSEndpoint, ns string) error {
+	log.Infof("Adding HNS endpoint %s to ns %s.", ep.Id, ns)
+
+	// Check if endpoint is already in target namespace.
+	nsEndpoints, err := hcn.GetNamespaceEndpointIds(ns)
+	if err != nil {
+		log.Errorf("Failed to get endpoints from namespace %s: %v.", ns, err)
+		return err
+	}
+	for _, endpointID := range nsEndpoints {
+		if endpointID == ep.Id {
+			log.Infof("HNS endpoint %s is already in ns %s.", ep.Id, ns)
+			return nil
+		}
+	}
+
+	return hcn.AddNamespaceEndpoint(ns, ep.Id)
 }
 
 // addEndpointPolicy adds a policy to an HNS endpoint.

@@ -65,6 +65,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		DNSServers:          netConfig.DNS.Nameservers,
 		DNSSuffixSearchList: netConfig.DNS.Search,
 		ServiceCIDR:         netConfig.Kubernetes.ServiceCIDR,
+		TaskENIConfig:       netConfig.TaskENIConfig,
 	}
 
 	err = nb.FindOrCreateNetwork(&nw)

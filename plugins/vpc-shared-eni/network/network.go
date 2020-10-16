@@ -17,6 +17,7 @@ import (
 	"net"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/config"
 )
 
 // Builder knows how to build container networks and connect container network interfaces.
@@ -40,6 +41,7 @@ type Network struct {
 	DNSServers          []string
 	DNSSuffixSearchList []string
 	ServiceCIDR         string
+	TaskENIConfig       config.TaskENIConfig
 }
 
 // Endpoint represents a container network interface.

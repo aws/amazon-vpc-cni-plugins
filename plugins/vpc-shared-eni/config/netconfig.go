@@ -40,23 +40,29 @@ type NetConfig struct {
 	GatewayIPAddress net.IP
 	InterfaceType    string
 	TapUserID        int
+	TaskENIConfig    TaskENIConfig
 	Kubernetes       KubernetesConfig
 }
 
 // netConfigJSON defines the network configuration JSON file format for the vpc-shared-eni plugin.
 type netConfigJSON struct {
 	cniTypes.NetConf
-	ENIName          string   `json:"eniName"`
-	ENIMACAddress    string   `json:"eniMACAddress"`
-	ENIIPAddress     string   `json:"eniIPAddress"`
-	VPCCIDRs         []string `json:"vpcCIDRs"`
-	BridgeType       string   `json:"bridgeType"`
-	BridgeNetNSPath  string   `json:"bridgeNetNSPath"`
-	IPAddress        string   `json:"ipAddress"`
-	GatewayIPAddress string   `json:"gatewayIPAddress"`
-	InterfaceType    string   `json:"interfaceType"`
-	TapUserID        string   `json:"tapUserID"`
-	ServiceCIDR      string   `json:"serviceCIDR"`
+	ENIName          string        `json:"eniName"`
+	ENIMACAddress    string        `json:"eniMACAddress"`
+	ENIIPAddress     string        `json:"eniIPAddress"`
+	VPCCIDRs         []string      `json:"vpcCIDRs"`
+	BridgeType       string        `json:"bridgeType"`
+	BridgeNetNSPath  string        `json:"bridgeNetNSPath"`
+	IPAddress        string        `json:"ipAddress"`
+	GatewayIPAddress string        `json:"gatewayIPAddress"`
+	InterfaceType    string        `json:"interfaceType"`
+	TapUserID        string        `json:"tapUserID"`
+	ServiceCIDR      string        `json:"serviceCIDR"`
+	TaskENIConfig    TaskENIConfig `json:"taskENIConfig"`
+}
+
+type TaskENIConfig struct {
+	NoInfra bool `json:"noInfra"`
 }
 
 const (
@@ -107,6 +113,7 @@ func New(args *cniSkel.CmdArgs, isAddCmd bool) (*NetConfig, error) {
 		BridgeType:      config.BridgeType,
 		BridgeNetNSPath: config.BridgeNetNSPath,
 		InterfaceType:   config.InterfaceType,
+		TaskENIConfig: config.TaskENIConfig,
 		Kubernetes: KubernetesConfig{
 			ServiceCIDR: config.ServiceCIDR,
 		},

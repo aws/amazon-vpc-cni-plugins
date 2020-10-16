@@ -25,7 +25,7 @@ const (
 	pluginName = "vpc-shared-eni"
 
 	// logFilePath is the path to the plugin's log file.
-	logFilePath = "/var/log/vpc-shared-eni.log"
+	logFilePath = "C:/cni/vpc-shared-eni.log"
 )
 
 var (
