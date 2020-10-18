@@ -17,13 +17,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
 	"github.com/Microsoft/hcsshim"
 	"github.com/Microsoft/hcsshim/hcn"
-
 	log "github.com/cihub/seelog"
 )
 
@@ -41,6 +42,11 @@ const (
 var (
 	// hnsMinVersion is the minimum version of HNS supported by this plugin.
 	hnsMinVersion = hcsshim.HNSVersion1803
+)
+
+var (
+	// LogFilePath is the path to the plugin's log file.
+	LogFilePath = filepath.Join(os.Getenv("ProgramFiles"), "Amazon", "cni", "log", "vpc-shared-eni.log")
 )
 
 // hnsRoutePolicy is an HNS route policy.
@@ -310,7 +316,7 @@ func (nb *BridgeBuilder) findOrCreateEndpointNS(nw *Network, ep *Endpoint) error
 	err = nb.addEndpointPolicy(
 		hnsEndpoint,
 		hnsRoutePolicy{
-			Policy:            hcsshim.Policy{Type: hcsshim.OutboundNat},
+			Policy: hcsshim.Policy{Type: hcsshim.OutboundNat},
 		})
 	if err != nil {
 		log.Errorf("Failed to add OutboundNat policy: %v.", err)

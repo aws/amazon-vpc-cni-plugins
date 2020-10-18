@@ -23,9 +23,6 @@ import (
 const (
 	// pluginName is the name of the plugin as specified in CNI config files.
 	pluginName = "vpc-shared-eni"
-
-	// logFilePath is the path to the plugin's log file.
-	logFilePath = "C:/cni/vpc-shared-eni.log"
 )
 
 var (
@@ -44,7 +41,7 @@ func NewPlugin() (*Plugin, error) {
 	var err error
 	plugin := &Plugin{}
 
-	plugin.Plugin, err = cni.NewPlugin(pluginName, specVersions, logFilePath, plugin)
+	plugin.Plugin, err = cni.NewPlugin(pluginName, specVersions, network.LogFilePath, plugin)
 	if err != nil {
 		return nil, err
 	}

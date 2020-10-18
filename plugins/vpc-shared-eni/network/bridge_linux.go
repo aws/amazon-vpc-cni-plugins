@@ -31,6 +31,9 @@ import (
 )
 
 const (
+	// LogFilePath is the path to the plugin's log file.
+	LogFilePath = "/var/log/vpc-shared-eni.log"
+
 	// bridgeNameFormat is the format used for generating bridge names (e.g. "vpcbr1").
 	bridgeNameFormat = "%sbr%d"
 
