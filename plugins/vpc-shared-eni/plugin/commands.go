@@ -167,7 +167,15 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	err = nb.DeleteEndpoint(&nw, &ep)
 	if err != nil {
 		// DEL is best-effort. Log and ignore the failure.
-		log.Errorf("Failed to delete endpoint, ignoring: %v", err)
+		log.Errorf("Failed to delete endpoint, ignoring: %v.", err)
+	}
+
+	if netConfig.TaskENIConfig.NoInfra {
+		err = nb.DeleteNetwork(&nw)
+		if err != nil {
+			log.Errorf("Failed to delete network: %v.", err)
+			return err
+		}
 	}
 
 	return nil
