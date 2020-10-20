@@ -113,7 +113,7 @@ func New(args *cniSkel.CmdArgs, isAddCmd bool) (*NetConfig, error) {
 		BridgeType:      config.BridgeType,
 		BridgeNetNSPath: config.BridgeNetNSPath,
 		InterfaceType:   config.InterfaceType,
-		TaskENIConfig: config.TaskENIConfig,
+		TaskENIConfig:   config.TaskENIConfig,
 		Kubernetes: KubernetesConfig{
 			ServiceCIDR: config.ServiceCIDR,
 		},

@@ -407,7 +407,6 @@ func (nb *BridgeBuilder) deleteEndpointNS(nw *Network, ep *Endpoint) error {
 
 	// Delete the HNS endpoint.
 	log.Infof("Deleting HNS endpoint name: %s ID: %s.", endpointName, hnsEndpoint.Id)
-	//_, err = hcsshim.HNSEndpointRequest("DELETE", hnsEndpoint.Id, "")
 	_, err = hnsEndpoint.Delete()
 	if err != nil {
 		log.Errorf("Failed to delete HNS endpoint: %v.", err)
