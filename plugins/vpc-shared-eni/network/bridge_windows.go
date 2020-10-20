@@ -124,7 +124,7 @@ func (nb *BridgeBuilder) DeleteNetwork(nw *Network) error {
 	}
 
 	// Delete the HNS network.
-	log.Infof("Deleting HNS network name: %s ID: %s", networkName, hnsNetwork.Id)
+	log.Infof("Deleting HNS network name: %s ID: %s.", networkName, hnsNetwork.Id)
 	_, err = hcsshim.HNSNetworkRequest("DELETE", hnsNetwork.Id, "")
 	if err != nil {
 		log.Errorf("Failed to delete HNS network: %v.", err)
@@ -296,7 +296,7 @@ func (nb *BridgeBuilder) findOrCreateEndpointNS(nw *Network, ep *Endpoint) error
 		Name:               endpointName,
 		VirtualNetworkName: nb.generateHNSNetworkName(nw),
 		DNSServerList:      strings.Join(nw.DNSServers, ","),
-		GatewayAddress:     nw.GatewayIPAddress.String(), // FIXME
+		GatewayAddress:     nw.GatewayIPAddress.String(),
 		IPAddress:          ep.IPAddress.IP,
 	}
 
@@ -352,6 +352,10 @@ func (nb *BridgeBuilder) findOrCreateEndpointNS(nw *Network, ep *Endpoint) error
 
 // DeleteEndpoint deletes an existing HNS endpoint.
 func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
+	if nw.TaskENIConfig.NoInfra {
+		return nb.deleteEndpointNS(nw, ep)
+	}
+
 	// Query the infrastructure container ID.
 	isInfraContainer, infraContainerID, err := nb.getInfraContainerID(ep)
 	if err != nil {
@@ -380,6 +384,31 @@ func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
 	// Delete the HNS endpoint.
 	log.Infof("Deleting HNS endpoint name: %s ID: %s", endpointName, hnsEndpoint.Id)
 	_, err = hcsshim.HNSEndpointRequest("DELETE", hnsEndpoint.Id, "")
+	if err != nil {
+		log.Errorf("Failed to delete HNS endpoint: %v.", err)
+	}
+
+	return err
+}
+
+func (nb *BridgeBuilder) deleteEndpointNS(nw *Network, ep *Endpoint) error {
+	endpointName := nb.generateHNSEndpointName(ep, ep.NetNSName)
+	hnsEndpoint, err := hcsshim.GetHNSEndpointByName(endpointName)
+	if err != nil {
+		return err
+	}
+
+	// Remove the HNS endpoint from the namespace.
+	log.Infof("Removing HNS endpoint %s from ns %s.", hnsEndpoint.Id, ep.NetNSName)
+	err = hcn.RemoveNamespaceEndpoint(ep.NetNSName, hnsEndpoint.Id)
+	if err != nil {
+		return err
+	}
+
+	// Delete the HNS endpoint.
+	log.Infof("Deleting HNS endpoint name: %s ID: %s.", endpointName, hnsEndpoint.Id)
+	//_, err = hcsshim.HNSEndpointRequest("DELETE", hnsEndpoint.Id, "")
+	_, err = hnsEndpoint.Delete()
 	if err != nil {
 		log.Errorf("Failed to delete HNS endpoint: %v.", err)
 	}

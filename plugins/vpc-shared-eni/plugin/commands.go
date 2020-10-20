@@ -153,6 +153,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 		BridgeType:      netConfig.BridgeType,
 		BridgeNetNSPath: netConfig.BridgeNetNSPath,
 		SharedENI:       sharedENI,
+		TaskENIConfig:   netConfig.TaskENIConfig,
 	}
 
 	ep := network.Endpoint{
