@@ -106,6 +106,9 @@ func GetNetNS(nameOrPath string) (NetNS, error) {
 
 // GetNetNSByName creates a new netNS object representing an existing netns by name.
 func GetNetNSByName(name string) (NetNS, error) {
+	if name == "" {
+		return nil, fmt.Errorf("failed to get invalid netns %s", name)
+	}
 	return GetNetNSByPath(path.Join(netNsMountPath, name))
 }
 
