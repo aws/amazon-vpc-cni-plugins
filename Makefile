@@ -42,6 +42,7 @@ LINKER_FLAGS = "\
 
 # Source files.
 COMMON_SOURCE_FILES = $(wildcard capabilities/* cni/* logger/* network/*/* version/*)
+VPC_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-eni -type f)
 VPC_SHARED_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-shared-eni -type f)
 VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-eni -type f)
 VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-pat-eni -type f)
@@ -50,15 +51,28 @@ NETNSEXEC_TOOL_SOURCE_FILES = $(shell find tools/netnsexec -type f)
 ALL_SOURCE_FILES := $(shell find . -name '*.go')
 
 # Shorthand build targets.
+vpc-eni: $(BUILD_DIR)/vpc-eni
 vpc-shared-eni: $(BUILD_DIR)/vpc-shared-eni
 vpc-branch-eni: $(BUILD_DIR)/vpc-branch-eni
 vpc-branch-pat-eni: $(BUILD_DIR)/vpc-branch-pat-eni
 aws-appmesh: $(BUILD_DIR)/aws-appmesh
 netnsexec: $(BUILD_DIR)/netnsexec
-all-plugins: vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni aws-appmesh
+all-plugins: vpc-eni vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni aws-appmesh
 all-tools: netnsexec
 all-binaries: all-plugins all-tools
 build: all-binaries unit-test
+
+# Build the vpc-eni CNI plugin.
+$(BUILD_DIR)/vpc-eni: $(VPC_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
+	go build \
+		-installsuffix cgo \
+		-v \
+		$(BUILD_FLAGS) \
+		-ldflags $(LINKER_FLAGS) \
+		-o $(BUILD_DIR)/vpc-eni \
+		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-eni
+	@echo "Built vpc-eni plugin."
 
 # Build the vpc-shared-eni CNI plugin.
 $(BUILD_DIR)/vpc-shared-eni: $(VPC_SHARED_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
