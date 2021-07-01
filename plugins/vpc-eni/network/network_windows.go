@@ -38,7 +38,7 @@ const (
 	// vNICNameFormat is the name format of vNIC created by Windows.
 	vNICNameFormat = "vEthernet (%s)"
 	// netshDisableInterface is the netsh command to disable a network interface.
-	netshDisableInterface = "netsh interface set interface name=\"%s\" admin=disabled"
+	netshDisableInterface = "Disable-NetAdapter -Name \"%s\" -Confirm:$false"
 )
 
 // NSType identifies the namespace type for the containers.
@@ -395,7 +395,7 @@ func (nb *NetBuilder) disableInterface(adapterName string) error {
 		// Disable the interface using netsh.
 		log.Infof("Disabling management vNIC %s in the host namespace.", adapterName)
 		commandString := fmt.Sprintf(netshDisableInterface, adapterName)
-		cmd := exec.Command("cmd", "/C", commandString)
+		cmd := exec.Command("powershell", "-C", commandString)
 
 		if err := cmd.Run(); err != nil {
 			return err
