@@ -73,6 +73,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		NetNSName:   args.Netns,
 		MACAddress:  netConfig.ENIMACAddress,
 		IPAddresses: netConfig.ENIIPAddresses,
+		BlockIMDS:   netConfig.BlockIMDS,
 	}
 
 	err = nb.FindOrCreateEndpoint(&nw, &ep)
