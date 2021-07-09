@@ -33,6 +33,7 @@ type NetConfig struct {
 	ENIIPAddresses     []net.IPNet
 	GatewayIPAddresses []net.IP
 	UseExistingNetwork bool
+	BlockIMDS          bool
 }
 
 // netConfigJSON defines the network configuration JSON file format for the vpc-eni plugin.
@@ -43,6 +44,7 @@ type netConfigJSON struct {
 	ENIIPAddresses     []string `json:"eniIPAddresses"`
 	GatewayIPAddresses []string `json:"gatewayIPAddresses"`
 	UseExistingNetwork bool     `json:"useExistingNetwork"`
+	BlockIMDS          bool     `json:"blockInstanceMetadata"`
 }
 
 // New creates a new NetConfig object by parsing the given CNI arguments.
@@ -78,6 +80,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		NetConf:            config.NetConf,
 		ENIName:            config.ENIName,
 		UseExistingNetwork: config.UseExistingNetwork,
+		BlockIMDS:          config.BlockIMDS,
 	}
 
 	// Parse the ENI MAC address.

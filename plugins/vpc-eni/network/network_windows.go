@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/aws/amazon-vpc-cni-plugins/network/imds"
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
 	"github.com/Microsoft/hcsshim"
@@ -196,6 +197,15 @@ func (nb *NetBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 		hnsEndpoint.IPAddress = ep.IPAddresses[0].IP
 		pl, _ := ep.IPAddresses[0].Mask.Size()
 		hnsEndpoint.PrefixLength = uint8(pl)
+	}
+
+	// Add ACL policies for blocking IMDS access through the endpoint.
+	if ep.BlockIMDS {
+		err = imds.BlockInstanceMetadataEndpoint(hnsEndpoint)
+		if err != nil {
+			log.Errorf("Failed to block instance metadata endpoint: %v.", err)
+			return err
+		}
 	}
 
 	// Create the HNS endpoint.

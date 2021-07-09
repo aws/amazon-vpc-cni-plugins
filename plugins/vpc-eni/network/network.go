@@ -44,4 +44,5 @@ type Endpoint struct {
 	NetNSName   string
 	MACAddress  net.HardwareAddr
 	IPAddresses []net.IPNet
+	BlockIMDS   bool
 }
