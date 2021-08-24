@@ -46,6 +46,7 @@ VPC_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-eni -type f)
 VPC_SHARED_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-shared-eni -type f)
 VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-eni -type f)
 VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-pat-eni -type f)
+VPC_TUNNEL_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-tunnel -type f)
 AWS_APPMESH_PLUGIN_SOURCE_FILES = $(shell find plugins/aws-appmesh -type f)
 NETNSEXEC_TOOL_SOURCE_FILES = $(shell find tools/netnsexec -type f)
 ALL_SOURCE_FILES := $(shell find . -name '*.go')
@@ -55,9 +56,10 @@ vpc-eni: $(BUILD_DIR)/vpc-eni
 vpc-shared-eni: $(BUILD_DIR)/vpc-shared-eni
 vpc-branch-eni: $(BUILD_DIR)/vpc-branch-eni
 vpc-branch-pat-eni: $(BUILD_DIR)/vpc-branch-pat-eni
+vpc-tunnel: $(BUILD_DIR)/vpc-tunnel
 aws-appmesh: $(BUILD_DIR)/aws-appmesh
 netnsexec: $(BUILD_DIR)/netnsexec
-all-plugins: vpc-eni vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni aws-appmesh
+all-plugins: vpc-eni vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni vpc-tunnel aws-appmesh
 all-tools: netnsexec
 all-binaries: all-plugins all-tools
 build: all-binaries unit-test
@@ -110,6 +112,18 @@ $(BUILD_DIR)/vpc-branch-pat-eni: $(VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES) $(COM
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-branch-pat-eni
 	@echo "Built vpc-branch-pat-eni plugin."
 
+# Build the vpc-tunnel CNI plugin.
+$(BUILD_DIR)/vpc-tunnel: $(VPC_TUNNEL_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
+	go build \
+		-installsuffix cgo \
+		-v \
+		$(BUILD_FLAGS) \
+		-ldflags $(LINKER_FLAGS) \
+		-o $(BUILD_DIR)/vpc-tunnel \
+		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-tunnel
+	@echo "Built vpc-tunnel plugin."
+
 # Build the aws-appmesh CNI plugin.
 $(BUILD_DIR)/aws-appmesh: $(AWS_APPMESH_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
 	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
@@ -157,6 +171,10 @@ e2e-test:  $(ALL_SOURCE_FILES) all-binaries
 .PHONY: vpc-branch-eni-e2e-tests
 vpc-branch-eni-e2e-tests: $(ALL_SOURCE_FILES) vpc-branch-eni
 	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test vpc_branch_eni" -race -timeout 60s ./plugins/vpc-branch-eni/e2eTests/
+
+.PHONY: vpc-tunnel-e2e-tests
+vpc-tunnel-e2e-tests: $(ALL_SOURCE_FILES) vpc-tunnel
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test vpc_tunnel" -race -timeout 60s ./plugins/vpc-tunnel/e2eTests/
 
 # Clean all build artifacts.
 .PHONY: clean
