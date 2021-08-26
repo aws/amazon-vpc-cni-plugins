@@ -23,6 +23,10 @@ import (
 const (
 	ipv4Forwarding = "/proc/sys/net/ipv4/conf/%s/forwarding"
 	ipv4ProxyARP   = "/proc/sys/net/ipv4/conf/%s/proxy_arp"
+
+	ipv6Forwarding = "/proc/sys/net/ipv6/conf/%s/forwarding"
+	ipv6AcceptRA   = "/proc/sys/net/ipv6/conf/%s/accept_ra"
+	ipv6AcceptDAD  = "/proc/sys/net/ipv6/conf/%s/accept_dad"
 )
 
 // SetIPv4Forwarding sets the IPv4 forwarding property of an interface to the given value.
@@ -33,6 +37,21 @@ func SetIPv4Forwarding(ifName string, value int) error {
 // SetIPv4ProxyARP sets the IPv4 proxy ARP property of an interface to the given value.
 func SetIPv4ProxyARP(ifName string, value int) error {
 	return set(fmt.Sprintf(ipv4ProxyARP, ifName), value)
+}
+
+// SetIPv6Forwarding sets the IPv6 forwarding property of an interface to the given value.
+func SetIPv6Forwarding(ifName string, value int) error {
+	return set(fmt.Sprintf(ipv6Forwarding, ifName), value)
+}
+
+// SetIPv6AcceptRA sets the IPv6 accept RA property of an interface to the given value.
+func SetIPv6AcceptRA(ifName string, value int) error {
+	return set(fmt.Sprintf(ipv6AcceptRA, ifName), value)
+}
+
+// SetIPv6AcceptDAD sets the IPv6 accept DAD property of an interface to the given value.
+func SetIPv6AcceptDAD(ifName string, value int) error {
+	return set(fmt.Sprintf(ipv6AcceptDAD, ifName), value)
 }
 
 // Set sets a system variable to the given value.

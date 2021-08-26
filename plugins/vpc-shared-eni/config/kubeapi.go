@@ -74,10 +74,11 @@ func retrievePodConfig(netConfig *NetConfig) error {
 		return fmt.Errorf("pod does not have label %s", vpcResourceNameIPv4Address)
 	}
 
-	netConfig.IPAddress, err = vpc.GetIPAddressFromString(ipAddress)
+	ipAddr, err := vpc.GetIPAddressFromString(ipAddress)
 	if err != nil {
 		return fmt.Errorf("invalid IPAddress %s from pod label", ipAddress)
 	}
+	netConfig.IPAddresses = append(netConfig.IPAddresses, *ipAddr)
 
 	return nil
 }

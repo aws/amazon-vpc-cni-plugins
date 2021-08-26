@@ -17,6 +17,7 @@ import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/config"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/network"
+	"net"
 
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
@@ -59,7 +60,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		BridgeType:          netConfig.BridgeType,
 		BridgeNetNSPath:     netConfig.BridgeNetNSPath,
 		SharedENI:           sharedENI,
-		ENIIPAddress:        netConfig.ENIIPAddress,
+		ENIIPAddresses:      netConfig.ENIIPAddresses,
 		GatewayIPAddress:    netConfig.GatewayIPAddress,
 		VPCCIDRs:            netConfig.VPCCIDRs,
 		DNSServers:          netConfig.DNS.Nameservers,
@@ -67,6 +68,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		ServiceCIDR:         netConfig.Kubernetes.ServiceCIDR,
 	}
 
+	// Below creates a bridge but doesn't require attaching any IPs given it is L3 bridge not L2
 	err = nb.FindOrCreateNetwork(&nw)
 	if err != nil {
 		log.Errorf("Failed to create network: %v.", err)
@@ -80,13 +82,28 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		IfName:      args.IfName,
 		IfType:      netConfig.InterfaceType,
 		TapUserID:   netConfig.TapUserID,
-		IPAddress:   netConfig.IPAddress,
+		IPAddresses: netConfig.IPAddresses,
 	}
 
 	err = nb.FindOrCreateEndpoint(&nw, &ep)
 	if err != nil {
 		log.Errorf("Failed to create endpoint: %v.", err)
 		return err
+	}
+
+	// Due to kubernetes behavior we are only printing single pod address as part of CNI result struct
+	// Printing both v4 and v6 addresses result in the pod defaulting to a v4 address.
+	version := "4"
+	var addr net.IPNet
+	gateway := netConfig.GatewayIPAddress
+	for _, ipAddrs := range netConfig.IPAddresses {
+		// If IPv6 address is present use that for the CNI result struct and break
+		if ipAddrs.IP.To4() == nil {
+			version = "6"
+			addr = ipAddrs
+			break
+		}
+		addr = ipAddrs
 	}
 
 	// Generate CNI result.
@@ -100,10 +117,10 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		},
 		IPs: []*cniTypesCurrent.IPConfig{
 			{
-				Version:   "4",
+				Version:   version,
 				Interface: cniTypesCurrent.Int(0),
-				Address:   *netConfig.IPAddress,
-				Gateway:   netConfig.GatewayIPAddress,
+				Address:   addr,
+				Gateway:   gateway,
 			},
 		},
 	}
@@ -160,7 +177,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 		IfName:      args.IfName,
 		IfType:      netConfig.InterfaceType,
 		TapUserID:   netConfig.TapUserID,
-		IPAddress:   netConfig.IPAddress,
+		IPAddresses: netConfig.IPAddresses,
 	}
 
 	err = nb.DeleteEndpoint(&nw, &ep)

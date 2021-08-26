@@ -86,7 +86,7 @@ func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs, isAddCmd b
 	}
 
 	// Retrieve any missing information not available in netconfig.
-	if retrievePodConfigHandler != nil && netConfig.IPAddress == nil {
+	if retrievePodConfigHandler != nil && len(netConfig.IPAddresses) == 0 {
 		err = retrievePodConfigHandler(netConfig)
 	}
 

@@ -32,11 +32,11 @@ type NetConfig struct {
 	cniTypes.NetConf
 	ENIName          string
 	ENIMACAddress    net.HardwareAddr
-	ENIIPAddress     *net.IPNet
+	ENIIPAddresses   []net.IPNet
 	VPCCIDRs         []net.IPNet
 	BridgeType       string
 	BridgeNetNSPath  string
-	IPAddress        *net.IPNet
+	IPAddresses      []net.IPNet
 	GatewayIPAddress net.IP
 	InterfaceType    string
 	TapUserID        int
@@ -48,11 +48,11 @@ type netConfigJSON struct {
 	cniTypes.NetConf
 	ENIName          string   `json:"eniName"`
 	ENIMACAddress    string   `json:"eniMACAddress"`
-	ENIIPAddress     string   `json:"eniIPAddress"`
+	ENIIPAddresses   []string `json:"eniIPAddresses"`
 	VPCCIDRs         []string `json:"vpcCIDRs"`
 	BridgeType       string   `json:"bridgeType"`
 	BridgeNetNSPath  string   `json:"bridgeNetNSPath"`
-	IPAddress        string   `json:"ipAddress"`
+	IPAddresses      []string `json:"ipAddresses"`
 	GatewayIPAddress string   `json:"gatewayIPAddress"`
 	InterfaceType    string   `json:"interfaceType"`
 	TapUserID        string   `json:"tapUserID"`
@@ -120,12 +120,13 @@ func New(args *cniSkel.CmdArgs, isAddCmd bool) (*NetConfig, error) {
 		}
 	}
 
-	// Parse the optional ENI IP address.
-	if config.ENIIPAddress != "" {
-		netConfig.ENIIPAddress, err = vpc.GetIPAddressFromString(config.ENIIPAddress)
+	// Parse the optional ENI IP addresses.
+	for _, eniIPString := range config.ENIIPAddresses {
+		eniIP, err := vpc.GetIPAddressFromString(eniIPString)
 		if err != nil {
-			return nil, fmt.Errorf("invalid ENIIPAddress %s", config.ENIIPAddress)
+			return nil, fmt.Errorf("invalid ENIIPAddress %s", eniIPString)
 		}
+		netConfig.ENIIPAddresses = append(netConfig.ENIIPAddresses, *eniIP)
 	}
 
 	// Parse the optional VPC CIDR blocks.
@@ -144,12 +145,13 @@ func New(args *cniSkel.CmdArgs, isAddCmd bool) (*NetConfig, error) {
 		return nil, fmt.Errorf("invalid BridgeType %s", config.BridgeType)
 	}
 
-	// Parse the optional IP address.
-	if config.IPAddress != "" {
-		netConfig.IPAddress, err = vpc.GetIPAddressFromString(config.IPAddress)
+	// Parse the optional IP addresses.
+	for _, ipString := range config.IPAddresses {
+		ipAddress, err := vpc.GetIPAddressFromString(ipString)
 		if err != nil {
-			return nil, fmt.Errorf("invalid IPAddress %s", config.IPAddress)
+			return nil, fmt.Errorf("invalid IPAddress %s", ipString)
 		}
+		netConfig.IPAddresses = append(netConfig.IPAddresses, *ipAddress)
 	}
 
 	// Parse the optional gateway IP address.

@@ -75,13 +75,13 @@ func (nb *BridgeBuilder) FindOrCreateNetwork(nw *Network) error {
 		// Connect the ENI to a bridge in the bridge network namespace.
 		err = bridgeNetNS.Run(func() error {
 			nw.BridgeIndex, err = nb.createBridge(
-				bridgeName, nw.BridgeType, nw.SharedENI, nw.ENIIPAddress)
+				bridgeName, nw.BridgeType, nw.SharedENI, nw.ENIIPAddresses)
 			return err
 		})
 	} else {
 		// Connect the ENI to a bridge.
 		nw.BridgeIndex, err = nb.createBridge(
-			bridgeName, nw.BridgeType, nw.SharedENI, nw.ENIIPAddress)
+			bridgeName, nw.BridgeType, nw.SharedENI, nw.ENIIPAddresses)
 	}
 
 	if err != nil {
@@ -125,62 +125,87 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	// Connect the bridge to the target network namespace with a veth pair.
 	err = nb.createVethPair(nw.BridgeIndex, targetNetNS, vethLinkName, vethPeerName)
 	if err != nil {
-		log.Errorf("Failed to create veth pair: %v.", err)
+		log.Errorf("Failed to create veth pair %s: %v.", vethLinkName, err)
 		return err
 	}
 
-	gatewayIPAddress := nw.GatewayIPAddress
+	var epIPAddresses []net.IPNet
+	var gatewayIPv4Address net.IP
+	var gatewayIPv6Address net.IP
+	var gatewayIPAddresses []net.IP
 	var gatewayMACAddress net.HardwareAddr
 
-	// Check whether the endpoint is in the same subnet as the ENI.
-	epSubnetPrefix := vpc.GetSubnetPrefix(ep.IPAddress)
-	eniSubnetPrefix := vpc.GetSubnetPrefix(nw.ENIIPAddress)
-	sameSubnet := (epSubnetPrefix.String() == eniSubnetPrefix.String())
-
-	if nw.BridgeType == config.BridgeTypeL3 || !sameSubnet {
-		// Route ingress traffic for the endpoint to the bridge.
-		route := &netlink.Route{
-			LinkIndex: nw.BridgeIndex,
-			Scope:     netlink.SCOPE_LINK,
+	if nw.BridgeType == config.BridgeTypeL3 {
+		// Configure the endpoint to relay the default gateway traffic to the on-link bridge.
+		bridgeLink, err := netlink.LinkByIndex(nw.BridgeIndex)
+		if err == nil {
+			gatewayMACAddress = bridgeLink.Attrs().HardwareAddr
 		}
 
-		// If it is in the same subnet, the IP address must have been allocated from a VPC subnet,
-		// so restrict the route to this IP address only. Otherwise, the IP address is from a CIDR
-		// block delegated to this instance, so add a single route for the entire CIDR block.
-		if sameSubnet {
-			dst := *ep.IPAddress
+		for _, ipAddr := range ep.IPAddresses {
+			// Route ingress traffic for this IP address to the bridge.
+			dst := ipAddr
 			_, maskSize := dst.Mask.Size()
 			dst.Mask = net.CIDRMask(maskSize, maskSize)
-			route.Dst = &dst
-		} else {
-			route.Dst = epSubnetPrefix
-		}
 
-		log.Infof("Adding IP route %+v to bridge.", route)
-		err = netlink.RouteAdd(route)
-		if err != nil && !os.IsExist(err) {
-			log.Errorf("Failed to add IP route %+v: %v.", route, err)
-			return err
-		}
+			route := &netlink.Route{
+				LinkIndex: nw.BridgeIndex,
+				Scope:     netlink.SCOPE_LINK,
+				Dst:       &dst,
+			}
 
-		// Configure the endpoint to use the ENI subnet's default gateway.
-		if gatewayIPAddress == nil {
-			subnet, _ := vpc.NewSubnet(eniSubnetPrefix)
-			gatewayIPAddress = subnet.Gateways[0]
-		}
+			log.Infof("Adding IP route %+v to bridge.", route)
+			err = netlink.RouteAdd(route)
+			if err != nil && !os.IsExist(err) {
+				log.Errorf("Failed to add IP route %+v: %v.", route, err)
+				return err
+			}
 
-		// Configure the endpoint to relay the default gateway traffic to the on-link bridge.
-		link, err := netlink.LinkByIndex(nw.BridgeIndex)
-		if err == nil {
-			gatewayMACAddress = link.Attrs().HardwareAddr
+			// The endpoint IP addresses and default gateways are set differently based on the
+			// address family.
+			if ipAddr.IP.To4() != nil {
+				// Assign the endpoint IPv4 address as-is with the actual subnet prefix length.
+				epIPAddresses = append(epIPAddresses, ipAddr)
+
+				// For IPv4, the actual VPC subnet default gateway is used as the default gateway.
+				// If a gateway address was not specified, derive it from the endpoint's IP address.
+				if gatewayIPv4Address == nil {
+					if nw.GatewayIPAddress == nil {
+						subnet, _ := vpc.NewSubnet(vpc.GetSubnetPrefix(&ipAddr))
+						gatewayIPv4Address = subnet.Gateways[0]
+					} else {
+						gatewayIPv4Address = nw.GatewayIPAddress
+					}
+					gatewayIPAddresses = append(gatewayIPAddresses, gatewayIPv4Address)
+				}
+			} else {
+				// Set the endpoint IPv6 address prefix length to address size. This essentially
+				// disables neighbor discovery and forces the endpoint to send all egress traffic
+				// to the default gateway.
+				addr := ipAddr
+				_, maskSize := addr.Mask.Size()
+				addr.Mask = net.CIDRMask(maskSize, maskSize)
+				epIPAddresses = append(epIPAddresses, addr)
+
+				// For IPv6, the link-local address of the bridge is used as the default gateway.
+				if gatewayIPv6Address == nil {
+					addrs, _ := netlink.AddrList(bridgeLink, netlink.FAMILY_V6)
+					for _, addr := range addrs {
+						if netlink.Scope(addr.Scope) == netlink.SCOPE_LINK {
+							gatewayIPv6Address = addr.IP
+						}
+					}
+					gatewayIPAddresses = append(gatewayIPAddresses, gatewayIPv6Address)
+				}
+			}
 		}
 	}
 
 	// Setup the target network namespace.
 	err = targetNetNS.Run(func() error {
 		ep.MACAddress, err = nb.setupTargetNetNS(
-			vethPeerName, ep.IfType, ep.TapUserID, ep.IfName, ep.IPAddress,
-			gatewayIPAddress, gatewayMACAddress)
+			vethPeerName, ep.IfType, ep.TapUserID, ep.IfName, epIPAddresses,
+			gatewayIPAddresses, gatewayMACAddress)
 		return err
 	})
 	if err != nil {
@@ -197,7 +222,7 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 				Protocol: "IPv4",
 				In:       nw.SharedENI.GetLinkName(),
 				Match: &ebtables.IPv4Match{
-					Dst: ep.IPAddress.IP,
+					Dst: ep.IPAddresses[0].IP,
 				},
 				Target: &ebtables.DNATTarget{
 					ToDst:  ep.MACAddress,
@@ -243,45 +268,47 @@ func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
 		returnedErr = err
 	}
 
-	// Delete bridge layer2 configuration.
-	if nw.BridgeType == config.BridgeTypeL2 {
-		// Delete the MAC DNAT rule for the endpoint.
-		err = ebtables.NAT.Delete(
-			ebtables.PreRouting,
-			&ebtables.Rule{
-				Protocol: "IPv4",
-				In:       nw.SharedENI.GetLinkName(),
-				Match: &ebtables.IPv4Match{
-					Dst: ep.IPAddress.IP,
+	for _, ipAddr := range ep.IPAddresses {
+		// Delete bridge layer2 configuration.
+		if nw.BridgeType == config.BridgeTypeL2 {
+			// Delete the MAC DNAT rule for the endpoint.
+			err = ebtables.NAT.Delete(
+				ebtables.PreRouting,
+				&ebtables.Rule{
+					Protocol: "IPv4",
+					In:       nw.SharedENI.GetLinkName(),
+					Match: &ebtables.IPv4Match{
+						Dst: ipAddr.IP,
+					},
+					Target: &ebtables.DNATTarget{
+						ToDst:  ep.MACAddress,
+						Target: ebtables.Accept,
+					},
 				},
-				Target: &ebtables.DNATTarget{
-					ToDst:  ep.MACAddress,
-					Target: ebtables.Accept,
-				},
-			},
-		)
+			)
 
-		if err != nil {
-			log.Errorf("Failed to delete DNAT rule for endpoint: %v.", err)
-			returnedErr = err
+			if err != nil {
+				log.Errorf("Failed to delete DNAT rule for endpoint: %v.", err)
+				returnedErr = err
+			}
 		}
-	}
 
-	// Delete the route for ingress traffic for the endpoint to the bridge.
-	route := &netlink.Route{
-		LinkIndex: nw.BridgeIndex,
-		Scope:     netlink.SCOPE_LINK,
-		Dst:       ep.IPAddress,
-	}
+		// Delete the route for ingress traffic for the endpoint to the bridge.
+		route := &netlink.Route{
+			LinkIndex: nw.BridgeIndex,
+			Scope:     netlink.SCOPE_LINK,
+			Dst:       &ipAddr,
+		}
 
-	_, maskSize := route.Dst.Mask.Size()
-	route.Dst.Mask = net.CIDRMask(maskSize, maskSize)
+		_, maskSize := route.Dst.Mask.Size()
+		route.Dst.Mask = net.CIDRMask(maskSize, maskSize)
 
-	log.Infof("Deleting IP route %+v from bridge.", route)
-	err = netlink.RouteDel(route)
-	if err != nil && !os.IsNotExist(err) {
-		log.Errorf("Failed to delete IP route %+v: %v.", route, err)
-		return err
+		log.Infof("Deleting IP route %+v from bridge.", route)
+		err = netlink.RouteDel(route)
+		if err != nil && !os.IsNotExist(err) {
+			log.Errorf("Failed to delete IP route %+v: %v.", route, err)
+			return err
+		}
 	}
 
 	return returnedErr
@@ -292,7 +319,7 @@ func (nb *BridgeBuilder) createBridge(
 	bridgeName string,
 	bridgeType string,
 	sharedENI *eni.ENI,
-	ipAddress *net.IPNet) (int, error) {
+	ipAddresses []net.IPNet) (int, error) {
 
 	// Check if the bridge already exists.
 	bridge, err := net.InterfaceByName(bridgeName)
@@ -339,10 +366,17 @@ func (nb *BridgeBuilder) createBridge(
 		return 0, err
 	}
 
+	// Set dummy link operational state up.
+	err = netlink.LinkSetUp(dummyLink)
+	if err != nil {
+		log.Errorf("Failed to set dummy link state up: %v.", err)
+		return 0, err
+	}
+
 	// Set bridge MAC address to dummy's MAC address.
-	// Bridge by default inherits the smallest of the MAC addresses of interfaces connected to its
-	// ports. Explicitly setting a static address prevents the bridge from dynamically changing its
-	// address as interfaces join and leave the bridge.
+	// Bridge by default inherits the smallest of the MAC addresses of interfaces (veth in this case) connected
+	// to its ports. Explicitly setting a static address prevents the bridge from dynamically changing its address
+	// as interfaces join and leave the bridge.
 	link, err := netlink.LinkByName(dummyName)
 	if err != nil {
 		log.Errorf("Failed to query dummy link: %v.", err)
@@ -357,6 +391,7 @@ func (nb *BridgeBuilder) createBridge(
 	// Setup bridge layer2 configuration.
 	if bridgeType == config.BridgeTypeL2 {
 		// Remove IP address from shared ENI link.
+		ipAddress := &ipAddresses[0]
 		log.Infof("Removing IP address %v from ENI link %s.", ipAddress, sharedENI)
 		la = netlink.NewLinkAttrs()
 		la.Name = sharedENI.GetLinkName()
@@ -456,6 +491,7 @@ func (nb *BridgeBuilder) createBridge(
 		// Frames are switched between veth pairs and the shared ENI.
 
 		// Assign IP address to bridge.
+		ipAddress := &ipAddresses[0]
 		log.Infof("Assigning IP address %v to bridge link %s.", ipAddress, bridgeName)
 		address := &netlink.Addr{IPNet: ipAddress}
 		err = netlink.AddrAdd(bridgeLink, address)
@@ -486,28 +522,54 @@ func (nb *BridgeBuilder) createBridge(
 		// In layer3 configuration, the IP address and default route remain on the shared ENI.
 		// IP datagrams are routed between the bridge and the shared ENI.
 
-		// Bridge proxies ARP requests originating from veth pairs to the VPC.
-		log.Infof("Enabling IPv4 proxy ARP on %s.", bridgeName)
-		err = ipcfg.SetIPv4ProxyARP(bridgeName, 1)
-		if err != nil {
-			log.Errorf("Failed to enable IPv4 proxy ARP on %s: %v.", bridgeName, err)
-			return 0, err
+		if vpc.ListContainsIPv4Address(ipAddresses) {
+			// Bridge proxies ARP requests originating from veth pairs to the VPC.
+			log.Infof("Enabling IPv4 proxy ARP on %s.", bridgeName)
+			err = ipcfg.SetIPv4ProxyARP(bridgeName, 1)
+			if err != nil {
+				log.Errorf("Failed to enable IPv4 proxy ARP on %s: %v.", bridgeName, err)
+				return 0, err
+			}
+
+			// Enable IPv4 forwarding on the bridge and shared ENI, so that IP datagrams can be
+			// routed between them.
+			log.Infof("Enabling IPv4 forwarding on %s.", bridgeName)
+			err = ipcfg.SetIPv4Forwarding(bridgeName, 1)
+			if err != nil {
+				log.Errorf("Failed to enable IPv4 forwarding on %s: %v.", bridgeName, err)
+				return 0, err
+			}
+
+			log.Infof("Enabling IPv4 forwarding on %s.", sharedENI.GetLinkName())
+			err = ipcfg.SetIPv4Forwarding(sharedENI.GetLinkName(), 1)
+			if err != nil {
+				log.Errorf("Failed to enable IPv4 forwarding on %s: %v.", sharedENI.GetLinkName(), err)
+				return 0, err
+			}
 		}
 
-		// Enable IPv4 forwarding on the bridge and shared ENI, so that IP datagrams can be
-		// routed between them.
-		log.Infof("Enabling IPv4 forwarding on %s.", bridgeName)
-		err = ipcfg.SetIPv4Forwarding(bridgeName, 1)
-		if err != nil {
-			log.Errorf("Failed to enable IPv4 forwarding on %s: %v.", bridgeName, err)
-			return 0, err
-		}
+		if vpc.ListContainsIPv6Address(ipAddresses) {
+			// Eanble IPv6 forwarding on all interfaces.
+			log.Infof("Enabling IPv6 forwarding on all.")
+			err = ipcfg.SetIPv6Forwarding("all", 1)
+			if err != nil {
+				log.Errorf("Failed to enable IPv6 forwarding on all: %v.", err)
+				return 0, err
+			}
 
-		log.Infof("Enabling IPv4 forwarding on %s.", sharedENI.GetLinkName())
-		err = ipcfg.SetIPv4Forwarding(sharedENI.GetLinkName(), 1)
-		if err != nil {
-			log.Errorf("Failed to enable IPv4 forwarding on %s: %v.", sharedENI.GetLinkName(), err)
-			return 0, err
+			log.Infof("Enabling IPv6 accept RA on %s.", bridgeName)
+			err = ipcfg.SetIPv6AcceptRA(bridgeName, 2)
+			if err != nil {
+				log.Errorf("Failed to enable IPv6 accept RA on %s: %v.", bridgeName, err)
+				return 0, err
+			}
+
+			log.Infof("Enabling IPv6 accept RA on %s.", sharedENI.GetLinkName())
+			err = ipcfg.SetIPv6AcceptRA(sharedENI.GetLinkName(), 2)
+			if err != nil {
+				log.Errorf("Failed to enable IPv6 accept RA on %s: %v.", sharedENI.GetLinkName(), err)
+				return 0, err
+			}
 		}
 	}
 
@@ -663,8 +725,8 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 	ifType string,
 	tapUserID int,
 	ifName string,
-	ipAddress *net.IPNet,
-	gatewayIPAddress net.IP,
+	ipAddresses []net.IPNet,
+	gatewayIPAddresses []net.IP,
 	gatewayMACAddress net.HardwareAddr) (net.HardwareAddr, error) {
 
 	// Check if the container interface already exists.
@@ -676,7 +738,8 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 
 	switch ifType {
 	case config.IfTypeVETH:
-		err = nb.setupVethLink(vethPeerName, ifName, ipAddress, gatewayIPAddress, gatewayMACAddress)
+		err = nb.setupVethLink(vethPeerName, ifName, ipAddresses,
+			gatewayIPAddresses, gatewayMACAddress)
 	case config.IfTypeTAP:
 		err = nb.setupTapLink(vethPeerName, ifName, tapUserID)
 	}
@@ -694,8 +757,8 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 func (nb *BridgeBuilder) setupVethLink(
 	vethPeerName string,
 	ifName string,
-	ipAddress *net.IPNet,
-	gatewayIPAddress net.IP,
+	ipAddresses []net.IPNet,
+	gatewayIPAddresses []net.IP,
 	gatewayMACAddress net.HardwareAddr) error {
 
 	var link netlink.Link
@@ -707,7 +770,7 @@ func (nb *BridgeBuilder) setupVethLink(
 	link = &netlink.Dummy{LinkAttrs: la}
 	err := netlink.LinkSetName(link, ifName)
 	if err != nil {
-		log.Errorf("Failed to set veth link %s name: %v.", vethPeerName, err)
+		log.Errorf("Failed to set veth link %s name %s: %v.", vethPeerName, ifName, err)
 		return err
 	}
 
@@ -722,35 +785,35 @@ func (nb *BridgeBuilder) setupVethLink(
 	}
 
 	// Set the IP address and the default gateway if specified.
-	if ipAddress != nil {
+	for _, ipAddress := range ipAddresses {
+		if ipAddress.IP.To4() == nil {
+			// In case of IPv6 before assigning the IP address to eth0 interface disable DAD
+			log.Infof("Disabling IPv6 accept DAD on %s.", ifName)
+			err = ipcfg.SetIPv6AcceptDAD(ifName, 0)
+			if err != nil {
+				log.Errorf("Failed to disable IPv6 accept DAD on %s: %v.", ifName, err)
+				return err
+			}
+		}
+
 		// Assign the IP address.
 		log.Infof("Assigning IP address %v to link %s.", ipAddress, ifName)
-		address := &netlink.Addr{IPNet: ipAddress}
-		err = netlink.AddrAdd(link, address)
+		address := &netlink.Addr{IPNet: &ipAddress}
+		err := netlink.AddrAdd(link, address)
 		if err != nil {
 			log.Errorf("Failed to assign IP address to link %v: %v.", ifName, err)
 			return err
 		}
+	}
 
-		// If the gateway IP address was not specified, derive it from the ENI IP address.
-		if gatewayIPAddress == nil {
-			// Parse VPC subnet.
-			subnet, err := vpc.NewSubnet(vpc.GetSubnetPrefix(ipAddress))
-			if err != nil {
-				log.Errorf("Failed to parse VPC subnet for %s: %v.", ipAddress, err)
-				return err
-			}
+	iface, err := net.InterfaceByName(ifName)
+	if err != nil {
+		log.Errorf("Failed to find link index: %v.", err)
+		return err
+	}
 
-			gatewayIPAddress = subnet.Gateways[0]
-		}
-
-		iface, err := net.InterfaceByName(ifName)
-		if err != nil {
-			log.Errorf("Failed to find link index: %v.", err)
-			return err
-		}
-
-		// Add default route to the specified gateway via ENI.
+	// Set default routes.
+	for _, gatewayIPAddress := range gatewayIPAddresses {
 		route := &netlink.Route{
 			LinkIndex: iface.Index,
 			Gw:        gatewayIPAddress,
@@ -764,8 +827,8 @@ func (nb *BridgeBuilder) setupVethLink(
 			return err
 		}
 
-		// Add the neighbor entry for the gateway if a MAC address is specified.
-		if gatewayMACAddress != nil {
+		// Add a permanent neighbor entry for the IPv4 gateway if a MAC address is specified.
+		if gatewayMACAddress != nil && gatewayIPAddress.To4() != nil {
 			neigh := &netlink.Neigh{
 				LinkIndex:    iface.Index,
 				Family:       netlink.FAMILY_V4,
