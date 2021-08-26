@@ -81,7 +81,7 @@ func (nb *BridgeBuilder) FindOrCreateNetwork(nw *Network) error {
 
 		Subnets: []hcsshim.Subnet{
 			{
-				AddressPrefix:  vpc.GetSubnetPrefix(nw.ENIIPAddress).String(),
+				AddressPrefix:  vpc.GetSubnetPrefix(&nw.ENIIPAddresses[0]).String(),
 				GatewayAddress: nw.GatewayIPAddress.String(),
 			},
 		},
@@ -127,6 +127,11 @@ func (nb *BridgeBuilder) DeleteNetwork(nw *Network) error {
 
 // FindOrCreateEndpoint creates a new HNS endpoint in the network.
 func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
+	// This plugin does not yet support IPv6, or multiple IPv4 addresses.
+	if len(ep.IPAddresses) > 1 || ep.IPAddresses[0].IP.To4() == nil {
+		return fmt.Errorf("Only a single IPv4 address per endpoint is supported on Windows")
+	}
+
 	// Query the infrastructure container ID.
 	isInfraContainer, infraContainerID, err := nb.getInfraContainerID(ep)
 	if err != nil {
@@ -167,15 +172,15 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	}
 
 	// Set the endpoint IP address.
-	hnsEndpoint.IPAddress = ep.IPAddress.IP
-	pl, _ := ep.IPAddress.Mask.Size()
+	hnsEndpoint.IPAddress = ep.IPAddresses[0].IP
+	pl, _ := ep.IPAddresses[0].Mask.Size()
 	hnsEndpoint.PrefixLength = uint8(pl)
 
 	// SNAT endpoint traffic to ENI primary IP address...
 	var snatExceptions []string
 	if nw.VPCCIDRs == nil {
 		// ...except if the destination is in the same subnet as the ENI.
-		snatExceptions = []string{vpc.GetSubnetPrefix(nw.ENIIPAddress).String()}
+		snatExceptions = []string{vpc.GetSubnetPrefix(&nw.ENIIPAddresses[0]).String()}
 	} else {
 		// ...or, if known, the same VPC.
 		for _, cidr := range nw.VPCCIDRs {
@@ -191,7 +196,7 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 		hnsEndpoint,
 		hcsshim.OutboundNatPolicy{
 			Policy: hcsshim.Policy{Type: hcsshim.OutboundNat},
-			// Implicit VIP: nw.ENIIPAddress.IP.String(),
+			// Implicit VIP: nw.ENIIPAddresses[0].IP.String(),
 			Exceptions: snatExceptions,
 		})
 	if err != nil {
@@ -221,7 +226,7 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 			hnsEndpoint,
 			hnsRoutePolicy{
 				Policy:            hcsshim.Policy{Type: hcsshim.Route},
-				DestinationPrefix: nw.ENIIPAddress.IP.String() + "/32",
+				DestinationPrefix: nw.ENIIPAddresses[0].IP.String() + "/32",
 				NeedEncap:         true,
 			})
 		if err != nil {

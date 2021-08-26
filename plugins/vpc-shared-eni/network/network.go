@@ -34,7 +34,7 @@ type Network struct {
 	BridgeNetNSPath     string
 	BridgeIndex         int
 	SharedENI           *eni.ENI
-	ENIIPAddress        *net.IPNet
+	ENIIPAddresses      []net.IPNet
 	GatewayIPAddress    net.IP
 	VPCCIDRs            []net.IPNet
 	DNSServers          []string
@@ -50,5 +50,5 @@ type Endpoint struct {
 	IfType      string
 	TapUserID   int
 	MACAddress  net.HardwareAddr
-	IPAddress   *net.IPNet
+	IPAddresses []net.IPNet
 }

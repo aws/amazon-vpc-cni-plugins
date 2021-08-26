@@ -43,3 +43,23 @@ func CompareMACAddress(addr1, addr2 net.HardwareAddr) bool {
 
 	return true
 }
+
+// ListContainsIPv4Address returns whether the given IP address list contains an IPv4 address.
+func ListContainsIPv4Address(ipAddresses []net.IPNet) bool {
+	for _, addr := range ipAddresses {
+		if addr.IP.To4() != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// ListContainsIPv6Address returns whether the given IP address list contains an IPv6 address.
+func ListContainsIPv6Address(ipAddresses []net.IPNet) bool {
+	for _, addr := range ipAddresses {
+		if addr.IP.To4() == nil {
+			return true
+		}
+	}
+	return false
+}
