@@ -51,7 +51,7 @@ func retrievePodConfig(netConfig *NetConfig) error {
 	}
 
 	var ipAddress string
-	kc := &netConfig.Kubernetes
+	kc := netConfig.Kubernetes
 
 	// Wait until the pod is annotated with an IP address resource label.
 	for i := 0; i < retries; i++ {
@@ -61,7 +61,7 @@ func retrievePodConfig(netConfig *NetConfig) error {
 		}
 
 		podAnnotations := pod.GetAnnotations()
-		ipAddress, _ = podAnnotations[vpcResourceNameIPv4Address]
+		ipAddress = podAnnotations[vpcResourceNameIPv4Address]
 		if ipAddress != "" {
 			break
 		}

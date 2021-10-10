@@ -17,7 +17,6 @@ import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/config"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/network"
-	"net"
 
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
@@ -65,7 +64,10 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		VPCCIDRs:            netConfig.VPCCIDRs,
 		DNSServers:          netConfig.DNS.Nameservers,
 		DNSSuffixSearchList: netConfig.DNS.Search,
-		ServiceCIDR:         netConfig.Kubernetes.ServiceCIDR,
+	}
+
+	if netConfig.Kubernetes != nil {
+		nw.ServiceCIDR = netConfig.Kubernetes.ServiceCIDR
 	}
 
 	// Below creates a bridge but doesn't require attaching any IPs given it is L3 bridge not L2
@@ -91,21 +93,6 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		return err
 	}
 
-	// Due to kubernetes behavior we are only printing single pod address as part of CNI result struct
-	// Printing both v4 and v6 addresses result in the pod defaulting to a v4 address.
-	version := "4"
-	var addr net.IPNet
-	gateway := netConfig.GatewayIPAddress
-	for _, ipAddrs := range netConfig.IPAddresses {
-		// If IPv6 address is present use that for the CNI result struct and break
-		if ipAddrs.IP.To4() == nil {
-			version = "6"
-			addr = ipAddrs
-			break
-		}
-		addr = ipAddrs
-	}
-
 	// Generate CNI result.
 	result := &cniTypesCurrent.Result{
 		Interfaces: []*cniTypesCurrent.Interface{
@@ -115,14 +102,31 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 				Sandbox: args.Netns,
 			},
 		},
-		IPs: []*cniTypesCurrent.IPConfig{
-			{
-				Version:   version,
-				Interface: cniTypesCurrent.Int(0),
-				Address:   addr,
-				Gateway:   gateway,
-			},
-		},
+	}
+
+	// Populate an IPConfig entry for each IP address.
+	for _, ipAddr := range netConfig.IPAddresses {
+		ipCfg := &cniTypesCurrent.IPConfig{
+			Interface: cniTypesCurrent.Int(0),
+			Address:   ipAddr,
+		}
+
+		if ipAddr.IP.To4() != nil {
+			ipCfg.Version = "4"
+			ipCfg.Gateway = netConfig.GatewayIPAddress
+		} else {
+			ipCfg.Version = "6"
+
+			// Kubernetes doesn't implement dual-stack behavior properly. It defaults to IPv4 if
+			// both an IPv4 and IPv6 address are present. Work around that by reporting only the
+			// first IPv6 address in dual-stack setups.
+			if netConfig.Kubernetes != nil {
+				result.IPs = []*cniTypesCurrent.IPConfig{ipCfg}
+				break
+			}
+		}
+
+		result.IPs = append(result.IPs, ipCfg)
 	}
 
 	// Output CNI result.

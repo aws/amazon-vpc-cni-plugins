@@ -40,7 +40,7 @@ type NetConfig struct {
 	GatewayIPAddress net.IP
 	InterfaceType    string
 	TapUserID        int
-	Kubernetes       KubernetesConfig
+	Kubernetes       *KubernetesConfig
 }
 
 // netConfigJSON defines the network configuration JSON file format for the vpc-shared-eni plugin.
@@ -107,9 +107,6 @@ func New(args *cniSkel.CmdArgs, isAddCmd bool) (*NetConfig, error) {
 		BridgeType:      config.BridgeType,
 		BridgeNetNSPath: config.BridgeNetNSPath,
 		InterfaceType:   config.InterfaceType,
-		Kubernetes: KubernetesConfig{
-			ServiceCIDR: config.ServiceCIDR,
-		},
 	}
 
 	// Parse the ENI MAC address.
@@ -177,6 +174,10 @@ func New(args *cniSkel.CmdArgs, isAddCmd bool) (*NetConfig, error) {
 
 	// Parse orchestrator-specific configuration.
 	if strings.Contains(args.Args, "K8S") {
+		netConfig.Kubernetes = &KubernetesConfig{
+			ServiceCIDR: config.ServiceCIDR,
+		}
+
 		err = parseKubernetesArgs(&netConfig, args, isAddCmd)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse Kubernetes args: %v", err)
