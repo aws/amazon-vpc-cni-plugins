@@ -64,7 +64,7 @@ func parseKubernetesArgs(netConfig *NetConfig, args *cniSkel.CmdArgs, isAddCmd b
 		return fmt.Errorf("failed to parse runtime args: %v", err)
 	}
 
-	kc := &netConfig.Kubernetes
+	kc := netConfig.Kubernetes
 	kc.Namespace = string(ka.K8S_POD_NAMESPACE)
 	kc.PodName = string(ka.K8S_POD_NAME)
 	kc.PodInfraContainerID = string(ka.K8S_POD_INFRA_CONTAINER_ID)

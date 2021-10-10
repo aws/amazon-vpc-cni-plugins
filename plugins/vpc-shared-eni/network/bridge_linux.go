@@ -738,8 +738,7 @@ func (nb *BridgeBuilder) setupTargetNetNS(
 
 	switch ifType {
 	case config.IfTypeVETH:
-		err = nb.setupVethLink(vethPeerName, ifName, ipAddresses,
-			gatewayIPAddresses, gatewayMACAddress)
+		err = nb.setupVethLink(vethPeerName, ifName, ipAddresses, gatewayIPAddresses, gatewayMACAddress)
 	case config.IfTypeTAP:
 		err = nb.setupTapLink(vethPeerName, ifName, tapUserID)
 	}
@@ -770,7 +769,7 @@ func (nb *BridgeBuilder) setupVethLink(
 	link = &netlink.Dummy{LinkAttrs: la}
 	err := netlink.LinkSetName(link, ifName)
 	if err != nil {
-		log.Errorf("Failed to set veth link %s name %s: %v.", vethPeerName, ifName, err)
+		log.Errorf("Failed to set veth link %s name: %v.", vethPeerName, err)
 		return err
 	}
 
@@ -784,10 +783,11 @@ func (nb *BridgeBuilder) setupVethLink(
 		return err
 	}
 
-	// Set the IP address and the default gateway if specified.
+	// Assign IP addresses.
 	for _, ipAddress := range ipAddresses {
 		if ipAddress.IP.To4() == nil {
-			// In case of IPv6 before assigning the IP address to eth0 interface disable DAD
+			// Disable IPv6 duplicate address detection to speed up address assignment.
+			// Linux does not implement DAD for IPv4 addresses.
 			log.Infof("Disabling IPv6 accept DAD on %s.", ifName)
 			err = ipcfg.SetIPv6AcceptDAD(ifName, 0)
 			if err != nil {
@@ -796,10 +796,9 @@ func (nb *BridgeBuilder) setupVethLink(
 			}
 		}
 
-		// Assign the IP address.
 		log.Infof("Assigning IP address %v to link %s.", ipAddress, ifName)
 		address := &netlink.Addr{IPNet: &ipAddress}
-		err := netlink.AddrAdd(link, address)
+		err = netlink.AddrAdd(link, address)
 		if err != nil {
 			log.Errorf("Failed to assign IP address to link %v: %v.", ifName, err)
 			return err
@@ -814,6 +813,7 @@ func (nb *BridgeBuilder) setupVethLink(
 
 	// Set default routes.
 	for _, gatewayIPAddress := range gatewayIPAddresses {
+		// Add default route to the specified gateway on the veth link.
 		route := &netlink.Route{
 			LinkIndex: iface.Index,
 			Gw:        gatewayIPAddress,
