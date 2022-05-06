@@ -16,6 +16,7 @@ package plugin
 import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh/config"
+	pluginutils "github.com/aws/amazon-vpc-cni-plugins/plugins/utils/plugin"
 
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
@@ -214,29 +215,10 @@ func (plugin *Plugin) setupIngressRules(
 	if config.ProxyIngressPort == "" || len(config.AppPorts) == 0 {
 		return nil
 	}
-
-	err := iptable.NewChain("nat", ingressChain)
-	if err != nil {
-		return err
+	var interceptPortToListenerPorts = map[string]string{
+		config.ProxyIngressPort: config.AppPorts,
 	}
-
-	// Route everything arriving at the application port to proxy.
-	err = iptable.Append("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", config.AppPorts,
-		"-j", "REDIRECT", "--to-port", config.ProxyIngressPort)
-	if err != nil {
-		log.Errorf("Append rule to redirect traffic to proxyIngressPort failed: %v", err)
-		return err
-	}
-
-	// Apply ingress chain to everything non-local.
-	err = iptable.Append("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!", "--src-type",
-		"LOCAL", "-j", ingressChain)
-	if err != nil {
-		log.Errorf("Append rule to jump from PREROUTING to ingress chain failed: %v", err)
-		return err
-	}
-
-	return nil
+	return pluginutils.RedirectNonLocalTraffic(iptable, ingressChain, interceptPortToListenerPorts)
 }
 
 // deleteIptablesRules deletes iptables/ip6tables rules in container network namespace.
@@ -270,49 +252,20 @@ func (plugin *Plugin) deleteIngressRules(
 		return nil
 	}
 	// Delete ingress rule from iptables.
-	err := iptable.Delete("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!", "--src-type",
-		"LOCAL", "-j", ingressChain)
-	if err != nil {
+	if err := pluginutils.DeleteNonLocalRedirectionRules(iptable, ingressChain); err != nil {
 		log.Errorf("Delete the rule in PREROUTING chain failed: %v", err)
 		return err
 	}
-
-	// flush and delete ingress chain.
-	err = iptable.ClearChain("nat", ingressChain)
-	if err != nil {
-		log.Errorf("Failed to flush rules in chain[%v]: %v", ingressChain, err)
-		return err
-	}
-	err = iptable.DeleteChain("nat", ingressChain)
-	if err != nil {
-		log.Errorf("Failed to delete chain[%v]: %v", ingressChain, err)
-		return err
-	}
-
-	return nil
+	return pluginutils.RemoveChain(iptable, ingressChain)
 }
 
 // deleteEgressRules deletes the iptable rules for egress traffic.
 func (plugin *Plugin) deleteEgressRules(iptable *iptables.IPTables) error {
 	// Delete egress rule from iptables.
-	err := iptable.Delete("nat", "OUTPUT", "-p", "tcp", "-m", "addrtype", "!", "--dst-type",
-		"LOCAL", "-j", egressChain)
-	if err != nil {
+	if err := iptable.Delete("nat", "OUTPUT", "-p", "tcp", "-m", "addrtype", "!", "--dst-type",
+		"LOCAL", "-j", egressChain); err != nil {
 		log.Errorf("Delete the rule in OUTPUT chain failed: %v", err)
 		return err
 	}
-
-	// flush and delete egress chain.
-	err = iptable.ClearChain("nat", egressChain)
-	if err != nil {
-		log.Errorf("Failed to flush rules in chain[%v]: %v", egressChain, err)
-		return err
-	}
-	err = iptable.DeleteChain("nat", egressChain)
-	if err != nil {
-		log.Errorf("Failed to delete chain[%v]: %v", egressChain, err)
-		return err
-	}
-
-	return nil
+	return pluginutils.RemoveChain(iptable, egressChain)
 }

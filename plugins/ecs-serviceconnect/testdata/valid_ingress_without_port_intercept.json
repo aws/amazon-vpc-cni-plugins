@@ -1,0 +1,25 @@
+{
+  "type": "ecs-serviceconnect",
+  "cniVersion": "0.3.0",
+  "ingressConfig": [
+    {
+      "interceptPort": 8080,
+      "listenerName": "inbound_abc",
+      "listenerPort": 30000
+    },
+    {
+      "listenerName": "inbound_bcd",
+      "listenerPort": 30001
+    }
+  ],
+  "egressConfig": {
+    "listenerName": "outbound_listener",
+    "listenerPort": 30002,
+    "vip": {
+      "ipv4Cidr": "127.255.0.0/16",
+      "ipv6Cidr": "2002::1234:abcd:ffff:c0a8:101/64"
+    }
+  },
+  "networkMode": "bridge_tproxy",
+  "enableIPv6": true
+}
