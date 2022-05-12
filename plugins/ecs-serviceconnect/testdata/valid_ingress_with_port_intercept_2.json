@@ -21,6 +21,5 @@
       "ipv6Cidr": "2002::1234:abcd:ffff:c0a8:101/64"
     }
   },
-  "networkMode": "bridge_dnat",
   "enableIPv6": true
 }

@@ -19,22 +19,23 @@ import (
 )
 
 // RedirectNonLocalTraffic adds iptable rules to the given chain to route non-local traffic coming in from the
-// given listener port to redirect port and adds the chain to the NAT table at PREROUTING stage
+// given listener port to intercept ports and adds the chain to the NAT table at PREROUTING stage
 func RedirectNonLocalTraffic(
 	iptable *iptables.IPTables,
 	chain string,
-	redirectPortToListenerPorts map[string]string) error {
+	listenerPortToInterceptPorts map[string]string) error {
 
 	// Create a new chain
 	err := iptable.NewChain("nat", chain)
 	if err != nil {
+		log.Errorf("Create new IP table chain[%v] failed: %v", chain, err)
 		return err
 	}
 
-	// Route everything arriving at listener ports to intercept port.
-	for redirectPort, listenerPorts := range redirectPortToListenerPorts {
-		err := iptable.Append("nat", chain, "-p", "tcp", "-m", "multiport", "--dports", listenerPorts,
-			"-j", "REDIRECT", "--to-port", redirectPort)
+	// Route everything arriving at intercept ports to listener port.
+	for listenerPort, interceptPorts := range listenerPortToInterceptPorts {
+		err := iptable.Append("nat", chain, "-p", "tcp", "-m", "multiport", "--dports", interceptPorts,
+			"-j", "REDIRECT", "--to-port", listenerPort)
 		if err != nil {
 			log.Errorf("Append rule to redirect traffic to Port in chain[%v] failed: %v", chain, err)
 			return err

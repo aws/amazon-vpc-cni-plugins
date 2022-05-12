@@ -14,14 +14,15 @@
 package plugin
 
 import (
+	"strconv"
+
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/ecs-serviceconnect/config"
 	pluginutils "github.com/aws/amazon-vpc-cni-plugins/plugins/utils/plugin"
-	"github.com/coreos/go-iptables/iptables"
-	"strconv"
+	cniSkel "github.com/containernetworking/cni/pkg/skel"
 
 	log "github.com/cihub/seelog"
-	cniSkel "github.com/containernetworking/cni/pkg/skel"
+	"github.com/coreos/go-iptables/iptables"
 )
 
 const (
@@ -81,12 +82,12 @@ func (plugin *Plugin) setupIngressRules(
 	iptable *iptables.IPTables,
 	config *config.NetConfig) error {
 	// Skip setting rules when there is no redirection
-	if len(config.IngressRedirectToListenerPortMap) == 0 {
+	if len(config.IngressListenerToInterceptPortMap) == 0 {
 		return nil
 	}
 
 	// Redirect non-local traffic to the redirection port
-	return pluginutils.RedirectNonLocalTraffic(iptable, ingressChain, config.IngressRedirectToListenerPortMap)
+	return pluginutils.RedirectNonLocalTraffic(iptable, ingressChain, config.IngressListenerToInterceptPortMap)
 }
 
 // setupEgressRules sets Egress port redirection rules in the network namespace
@@ -100,30 +101,23 @@ func (plugin *Plugin) setupEgressRules(
 	}
 
 	// Redirect traffic in the CIDR block to the egress port
-	return plugin.redirectCIDRTraffic(iptable, config.Mode, plugin.getCidr(proto, config), strconv.Itoa(config.EgressPort))
+	return plugin.redirectCIDRTraffic(iptable, plugin.getCidr(proto, config), strconv.Itoa(config.EgressPort))
 }
 
 // redirectCIDRTraffic sets rules to redirect traffic in the CIDR block to the egress port
 func (plugin *Plugin) redirectCIDRTraffic(
 	iptable *iptables.IPTables,
-	mode config.NetworkMode,
 	cidr string,
 	redirectPort string) error {
 	var err error
-	switch mode {
-	case config.AWSVPC, config.BRIDGE_DNAT:
-		err = iptable.Append("nat", "OUTPUT", "-p", "tcp", "-d", cidr,
-			"-j", "REDIRECT", "--to-port", redirectPort)
-	case config.BRIDGE_TPROXY:
-		// Create a new chain
-		if err = iptable.NewChain("mangle", egressChain); err != nil {
-			return err
-		}
-		//TODO: Add other rules
-	}
+	err = iptable.Append("nat", "OUTPUT", "-p", "tcp", "-d", cidr,
+		"-j", "REDIRECT", "--to-port", redirectPort)
+
 	if err != nil {
 		log.Errorf("Append rule to redirect traffic of CIDR failed: %v", err)
 	}
+
+	//TODO: Add other rules
 	return err
 }
 
@@ -184,7 +178,7 @@ func (plugin *Plugin) deleteIngressRules(
 	iptable *iptables.IPTables,
 	config *config.NetConfig) error {
 	// Skip deleting rules when there is no redirection
-	if len(config.IngressRedirectToListenerPortMap) == 0 {
+	if len(config.IngressListenerToInterceptPortMap) == 0 {
 		return nil
 	}
 	// Delete ingress rule from iptables.
@@ -206,7 +200,7 @@ func (plugin *Plugin) deleteEgressRules(
 		return nil
 	}
 	// Delete the CIDR redirection rules
-	return plugin.deleteCIDRRedirectionRule(iptable, config.Mode, plugin.getCidr(proto, config), strconv.Itoa(config.EgressPort))
+	return plugin.deleteCIDRRedirectionRule(iptable, plugin.getCidr(proto, config), strconv.Itoa(config.EgressPort))
 }
 
 // getCidr returns the CIDR for the given protocol
@@ -215,9 +209,9 @@ func (plugin *Plugin) getCidr(
 	config *config.NetConfig) string {
 	var cidr string
 	if proto == iptables.ProtocolIPv4 {
-		cidr = config.EgressIPV4CIDR
+		cidr = config.EgressIPv4CIDR
 	} else {
-		cidr = config.EgressIPV6CIDR
+		cidr = config.EgressIPv6CIDR
 	}
 	return cidr
 }
@@ -225,18 +219,11 @@ func (plugin *Plugin) getCidr(
 // deleteCIDRRedirectionRule deletes the CIDR redirection rule set
 func (plugin *Plugin) deleteCIDRRedirectionRule(
 	iptable *iptables.IPTables,
-	mode config.NetworkMode,
 	cidr string,
 	redirectPort string) error {
-	var err error
-	switch mode {
-	case config.AWSVPC, config.BRIDGE_DNAT:
-		err = iptable.Delete("nat", "OUTPUT", "-p", "tcp", "-d", cidr,
-			"-j", "REDIRECT", "--to-port", redirectPort)
-	case config.BRIDGE_TPROXY:
-		err = pluginutils.RemoveChain(iptable, egressChain)
-		// TODO: Remove other rules
-	}
+	err := iptable.Delete("nat", "OUTPUT", "-p", "tcp", "-d", cidr,
+		"-j", "REDIRECT", "--to-port", redirectPort)
+	// TODO: Remove other rules
 	if err != nil {
 		log.Errorf("Delete rule to redirect traffic of CIDR failed: %v", err)
 	}

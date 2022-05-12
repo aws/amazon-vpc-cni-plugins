@@ -16,59 +16,50 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	utils "github.com/aws/amazon-vpc-cni-plugins/plugins/utils/config"
-	cniSkel "github.com/containernetworking/cni/pkg/skel"
-	cniTypes "github.com/containernetworking/cni/pkg/types"
-	"github.com/coreos/go-iptables/iptables"
 	"strconv"
 	"strings"
+
+	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
+	cniSkel "github.com/containernetworking/cni/pkg/skel"
+	cniTypes "github.com/containernetworking/cni/pkg/types"
+
+	"github.com/coreos/go-iptables/iptables"
 )
 
-type NetworkMode string
-
-const (
-	// TODO: This is for experimenting with different configs. Will be changed to bridge
-	BRIDGE_DNAT   NetworkMode = "bridge_dnat"
-	BRIDGE_TPROXY NetworkMode = "bridge_tproxy"
-	AWSVPC        NetworkMode = "awsvpc"
-)
-
-// NetConfig defines the network configuration for the ecs-serviceconnect cni plugin.
+// NetConfig defines the network configuration for the ecs-serviceconnect CNI plugin.
 type NetConfig struct {
 	cniTypes.NetConf
-	IngressRedirectToListenerPortMap map[string]string
-	EgressPort                       int
-	EgressIPV4CIDR                   string
-	EgressIPV6CIDR                   string
-	IPProtocols                      []iptables.Protocol
-	Mode                             NetworkMode // To be used in future
+	IngressListenerToInterceptPortMap map[string]string
+	EgressPort                        int
+	EgressIPv4CIDR                    string
+	EgressIPv6CIDR                    string
+	IPProtocols                       []iptables.Protocol
 }
 
-// netConfigJSON defines the network configuration JSON file format for the ecs-serviceconnect cni plugin.
+// netConfigJSON defines the network configuration JSON file format for the ecs-serviceconnect CNI plugin.
 type netConfigJSON struct {
 	cniTypes.NetConf
-	IngressConfig []IngressConfigJSONEntry `json:"ingressConfig"`
-	EgressConfig  *EgressConfigJSON        `json:"egressConfig"`
-	NetworkConfig *NetworkMode             `json:"networkMode"`
+	IngressConfig []ingressConfigJSONEntry `json:"ingressConfig"`
+	EgressConfig  *egressConfigJSON        `json:"egressConfig"`
 	EnableIPv6    bool                     `json:"enableIPv6"`
 }
 
-// IngressConfigJSONEntry defines the ingress network config in JSON format for the ecs-serviceconnect cni plugin.
-type IngressConfigJSONEntry struct {
+// ingressConfigJSONEntry defines the ingress network config in JSON format for the ecs-serviceconnect CNI plugin.
+type ingressConfigJSONEntry struct {
 	ListenerPort  int `json:"listenerPort"`
 	InterceptPort int `json:"interceptPort,omitempty"`
 }
 
-// EgressConfigJSON defines the egress network config in JSON format for the ecs-serviceconnect cni plugin.
-type EgressConfigJSON struct {
+// egressConfigJSON defines the egress network config in JSON format for the ecs-serviceconnect CNI plugin.
+type egressConfigJSON struct {
 	ListenerPort int            `json:"listenerPort"`
-	VIP          *VIPConfigJSON `json:"vip"`
+	VIP          *vipConfigJSON `json:"vip"`
 }
 
-// VIPConfigJSON defines the EgressVIP network config in JSON format for the ecs-serviceconnect cni plugin.
-type VIPConfigJSON struct {
-	IPV4CIDR string `json:"ipv4Cidr,omitempty"`
-	IPV6CIDR string `json:"ipv6Cidr,omitempty"`
+// vipConfigJSON defines the EgressVIP network config in JSON format for the ecs-serviceconnect CNI plugin.
+type vipConfigJSON struct {
+	IPv4CIDR string `json:"ipv4Cidr,omitempty"`
+	IPv6CIDR string `json:"ipv6Cidr,omitempty"`
 }
 
 // New creates a new NetConfig object by parsing the given CNI arguments.
@@ -85,30 +76,29 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	}
 
 	// Parse ingress and construct a listener map
-	ingressRedirectToListenerPortMap := make(map[string]string)
+	ingressListenerToInterceptPortMap := make(map[string]string)
 	for _, s := range config.IngressConfig {
 		if s.InterceptPort != 0 {
-			ingressRedirectToListenerPortMap[strconv.Itoa(s.ListenerPort)] = strconv.Itoa(s.InterceptPort)
+			ingressListenerToInterceptPortMap[strconv.Itoa(s.ListenerPort)] = strconv.Itoa(s.InterceptPort)
 		}
 	}
 	// Parse egress
 	egressPort := 0
-	var egressIPV4CIDR, egressIPV6CIDR string
+	var egressIPv4CIDR, egressIPv6CIDR string
 	if config.EgressConfig != nil {
 		egressPort = config.EgressConfig.ListenerPort
-		egressIPV4CIDR = config.EgressConfig.VIP.IPV4CIDR
-		egressIPV6CIDR = config.EgressConfig.VIP.IPV6CIDR
+		egressIPv4CIDR = config.EgressConfig.VIP.IPv4CIDR
+		egressIPv6CIDR = config.EgressConfig.VIP.IPv6CIDR
 	}
 
 	// Populate NetConfig.
 	netConfig := NetConfig{
-		NetConf:                          config.NetConf,
-		IngressRedirectToListenerPortMap: ingressRedirectToListenerPortMap,
-		EgressPort:                       egressPort,
-		EgressIPV4CIDR:                   egressIPV4CIDR,
-		EgressIPV6CIDR:                   egressIPV6CIDR,
-		IPProtocols:                      getIPProtocols(config),
-		Mode:                             *config.NetworkConfig,
+		NetConf:                           config.NetConf,
+		IngressListenerToInterceptPortMap: ingressListenerToInterceptPortMap,
+		EgressPort:                        egressPort,
+		EgressIPv4CIDR:                    egressIPv4CIDR,
+		EgressIPv6CIDR:                    egressIPv6CIDR,
+		IPProtocols:                       getIPProtocols(config),
 	}
 	return &netConfig, nil
 }
@@ -117,9 +107,6 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 func validateConfig(config netConfigJSON) error {
 	if len(config.IngressConfig) == 0 && config.EgressConfig == nil {
 		return fmt.Errorf("either IngressConfig or EgressConfig must be present")
-	}
-	if config.NetworkConfig == nil {
-		return fmt.Errorf("missing required parameter: NetworkConfig")
 	}
 
 	if err := validateIngressConfig(config); err != nil {
@@ -130,20 +117,18 @@ func validateConfig(config netConfigJSON) error {
 			return err
 		}
 	}
-
-	// Validate Network Config
-	return validateNetworkConfig(config)
+	return nil
 }
 
 // validateIngressConfig validates Ingress Configuration
 func validateIngressConfig(config netConfigJSON) error {
 	for _, s := range config.IngressConfig {
 		// verify that the ports are valid
-		if err := utils.IsValidPortRange(s.ListenerPort); err != nil {
+		if err := vpc.ValidatePortRange(s.ListenerPort); err != nil {
 			return err
 		}
 		if s.InterceptPort != 0 {
-			return utils.IsValidPortRange(s.InterceptPort)
+			return vpc.ValidatePortRange(s.InterceptPort)
 		}
 	}
 	return nil
@@ -152,7 +137,7 @@ func validateIngressConfig(config netConfigJSON) error {
 // validateEgressConfig validates the egress configuration
 func validateEgressConfig(config netConfigJSON) error {
 	// verify that the port is valid
-	if err := utils.IsValidPortRange(config.EgressConfig.ListenerPort); err != nil {
+	if err := vpc.ValidatePortRange(config.EgressConfig.ListenerPort); err != nil {
 		return err
 	}
 
@@ -161,31 +146,25 @@ func validateEgressConfig(config netConfigJSON) error {
 	if egressVIPConfig == nil {
 		return fmt.Errorf("missing required parameter: EgressConfig VIP")
 	}
-	if egressVIPConfig.IPV4CIDR == "" {
-		return fmt.Errorf("missing required parameter: EgressConfig IPV4 VIP CIDR Address")
+	if egressVIPConfig.IPv4CIDR == "" {
+		return fmt.Errorf("missing required parameter: EgressConfig IPv4 CIDR Address")
 	}
 
-	trimCIDR := strings.TrimSpace(egressVIPConfig.IPV4CIDR)
-	if proto, valid := utils.IsValidCIDR(trimCIDR); !valid || proto != iptables.ProtocolIPv4 {
+	trimCIDR := strings.TrimSpace(egressVIPConfig.IPv4CIDR)
+	if proto, valid := vpc.IsValidCIDR(trimCIDR); !valid || proto != iptables.ProtocolIPv4 {
 		return fmt.Errorf("invalid parameter: EgressConfig IPv4 CIDR Address")
 	}
 
-	if egressVIPConfig.IPV6CIDR != "" {
-		trimCIDR := strings.TrimSpace(egressVIPConfig.IPV6CIDR)
-		if proto, valid := utils.IsValidCIDR(trimCIDR); !valid || proto != iptables.ProtocolIPv6 {
+	if config.EnableIPv6 {
+		trimCIDR := strings.TrimSpace(egressVIPConfig.IPv6CIDR)
+		if trimCIDR == "" {
+			return fmt.Errorf("missing EgressConfig IPv6 CIDR Address")
+		}
+		if proto, valid := vpc.IsValidCIDR(trimCIDR); !valid || proto != iptables.ProtocolIPv6 {
 			return fmt.Errorf("invalid parameter: EgressConfig IPv6 CIDR Address")
 		}
 	}
 	return nil
-}
-
-// validateNetworkConfig validates the Network Configuration
-func validateNetworkConfig(config netConfigJSON) error {
-	switch *config.NetworkConfig {
-	case AWSVPC, BRIDGE_DNAT, BRIDGE_TPROXY:
-		return nil
-	}
-	return fmt.Errorf("invalid value for NetworkConfig")
 }
 
 // getIPProtocols returns the IP protocols that need to be handled for the config

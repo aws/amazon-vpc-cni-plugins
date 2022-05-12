@@ -27,6 +27,7 @@ import (
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types/current"
+
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

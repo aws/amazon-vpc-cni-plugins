@@ -17,10 +17,10 @@ import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh/config"
 	pluginutils "github.com/aws/amazon-vpc-cni-plugins/plugins/utils/plugin"
-
-	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
 	cniTypes "github.com/containernetworking/cni/pkg/types"
+
+	log "github.com/cihub/seelog"
 	"github.com/coreos/go-iptables/iptables"
 )
 
@@ -215,10 +215,10 @@ func (plugin *Plugin) setupIngressRules(
 	if config.ProxyIngressPort == "" || len(config.AppPorts) == 0 {
 		return nil
 	}
-	var interceptPortToListenerPorts = map[string]string{
+	var listenerPortToInterceptPorts = map[string]string{
 		config.ProxyIngressPort: config.AppPorts,
 	}
-	return pluginutils.RedirectNonLocalTraffic(iptable, ingressChain, interceptPortToListenerPorts)
+	return pluginutils.RedirectNonLocalTraffic(iptable, ingressChain, listenerPortToInterceptPorts)
 }
 
 // deleteIptablesRules deletes iptables/ip6tables rules in container network namespace.

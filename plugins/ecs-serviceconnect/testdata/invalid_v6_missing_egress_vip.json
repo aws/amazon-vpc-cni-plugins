@@ -3,7 +3,7 @@
   "cniVersion": "0.3.0",
   "ingressConfig": [
     {
-      "interceptPort": -1,
+      "interceptPort": 8080,
       "listenerName": "inbound_abc",
       "listenerPort": 30000
     },
@@ -19,5 +19,6 @@
     "vip": {
       "ipv4Cidr": "127.255.0.0/16"
     }
-  }
+  },
+  "enableIPv6": true
 }

@@ -18,6 +18,5 @@
     "listenerPort": 30002,
     "vip": {
     }
-  },
-  "networkMode": "awsvpc"
+  }
 }

@@ -16,13 +16,14 @@
 package config
 
 import (
-	"github.com/coreos/go-iptables/iptables"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/containernetworking/cni/pkg/skel"
+
+	"github.com/coreos/go-iptables/iptables"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,7 +34,6 @@ type testConfig struct {
 	egressIpv4Vip string
 	egressIpv6Vip string
 	protos        []iptables.Protocol
-	mode          NetworkMode
 }
 
 // loadTestData loads test cases in json form.
@@ -58,7 +58,6 @@ func TestValidConfigs(t *testing.T) {
 			egressPort:    30002,
 			egressIpv4Vip: "127.255.0.0/16",
 			protos:        []iptables.Protocol{iptables.ProtocolIPv4},
-			mode:          AWSVPC,
 		},
 		{
 			filePath:      "valid_ingress_with_port_intercept_1",
@@ -66,7 +65,6 @@ func TestValidConfigs(t *testing.T) {
 			egressPort:    30002,
 			egressIpv4Vip: "127.255.0.0/16",
 			protos:        []iptables.Protocol{iptables.ProtocolIPv4},
-			mode:          AWSVPC,
 		},
 		{
 			filePath:      "valid_ingress_with_port_intercept_2",
@@ -75,7 +73,6 @@ func TestValidConfigs(t *testing.T) {
 			egressIpv4Vip: "127.255.0.0/16",
 			egressIpv6Vip: "2002::1234:abcd:ffff:c0a8:101/64",
 			protos:        []iptables.Protocol{iptables.ProtocolIPv4, iptables.ProtocolIPv6},
-			mode:          BRIDGE_DNAT,
 		},
 		{
 			filePath:      "valid_ingress_without_port_intercept",
@@ -84,13 +81,11 @@ func TestValidConfigs(t *testing.T) {
 			egressIpv4Vip: "127.255.0.0/16",
 			egressIpv6Vip: "2002::1234:abcd:ffff:c0a8:101/64",
 			protos:        []iptables.Protocol{iptables.ProtocolIPv4, iptables.ProtocolIPv6},
-			mode:          BRIDGE_TPROXY,
 		},
 		{
 			filePath:   "valid_without_egress",
-			ingressMap: map[string]string{"30000": "8080", "30001": "8090"},
+			ingressMap: map[string]string{},
 			egressPort: 0,
-			mode:       BRIDGE_TPROXY,
 			protos:     []iptables.Protocol{iptables.ProtocolIPv4},
 		},
 		{
@@ -98,7 +93,6 @@ func TestValidConfigs(t *testing.T) {
 			ingressMap:    map[string]string{},
 			egressPort:    30002,
 			egressIpv4Vip: "127.255.0.0/16",
-			mode:          BRIDGE_DNAT,
 			protos:        []iptables.Protocol{iptables.ProtocolIPv4},
 		},
 	} {
@@ -108,11 +102,10 @@ func TestValidConfigs(t *testing.T) {
 		netConfig, err := New(args)
 
 		assert.NoError(t, err)
-		assert.Equal(t, netConfig.IngressRedirectToListenerPortMap, config.ingressMap)
-		assert.Equal(t, netConfig.EgressPort, config.egressPort)
-		assert.Equal(t, netConfig.EgressIPV4CIDR, config.egressIpv4Vip)
-		assert.Equal(t, netConfig.EgressIPV6CIDR, config.egressIpv6Vip)
-		assert.Equal(t, netConfig.Mode, config.mode)
+		assert.Equal(t, config.ingressMap, netConfig.IngressListenerToInterceptPortMap)
+		assert.Equal(t, config.egressPort, netConfig.EgressPort)
+		assert.Equal(t, config.egressIpv4Vip, netConfig.EgressIPv4CIDR)
+		assert.Equal(t, config.egressIpv6Vip, netConfig.EgressIPv6CIDR)
 	}
 }
 
@@ -122,9 +115,8 @@ func TestInvalidConfigs(t *testing.T) {
 		"invalid_egress_ipv4_cidr_1", "invalid_egress_ipv4_cidr_2", "invalid_egress_ipv6_cidr_1",
 		"invalid_egress_ipv6_cidr_2", "invalid_egress_listener_port", "invalid_empty_egress",
 		"invalid_empty_egress_vip", "invalid_ingress_intercept_port", "invalid_ingress_listener_port",
-		"invalid_missing_egress_listener_port", "invalid_missing_egress_vip",
-		"invalid_missing_ingress_egress", "invalid_missing_ingress_listener_port",
-		"invalid_missing_network", "invalid_network",
+		"invalid_missing_egress_listener_port", "invalid_missing_egress_vip", "invalid_missing_ingress_egress",
+		"invalid_missing_ingress_listener_port", "invalid_v6_missing_egress_vip",
 	} {
 		args := &skel.CmdArgs{
 			StdinData: []byte(loadTestData(t, config)),

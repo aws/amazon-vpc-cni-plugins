@@ -10,6 +10,5 @@
       "ipv4Cidr": "127.255.0.0/16"
     }
   },
-  "networkMode": "awsvpc",
   "enableIPv6": false
 }

@@ -7,6 +7,5 @@
     "vip": {
       "ipv4Cidr": "127.255.0.0/16"
     }
-  },
-  "networkMode": "bridge_dnat"
+  }
 }

@@ -11,31 +11,29 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package main
+package vpc
 
 import (
-	"os"
+	"strconv"
+	"strings"
 
-	"github.com/aws/amazon-vpc-cni-plugins/plugins/ecs-serviceconnect/plugin"
+	"github.com/pkg/errors"
 )
 
-// main is the entry point for ecs-serviceconnect plugin executable.
-func main() {
-	plugin, err := plugin.NewPlugin()
-	if err != nil {
-		print(err.Error())
-		os.Exit(1)
-	}
+// ValidatePort checks whether the port only has digits and is within valid port range
+func ValidatePort(p string) error {
+	port := strings.TrimSpace(p)
 
-	err = plugin.Initialize()
-	if err != nil {
-		print(err.Error())
-		os.Exit(1)
+	if i, err := strconv.Atoi(port); err == nil {
+		return ValidatePortRange(i)
 	}
+	return errors.Errorf("invalid port [%s] specified", p)
+}
 
-	cniErr := plugin.Run()
-	if cniErr != nil {
-		cniErr.Print()
-		os.Exit(1)
+// ValidatePortRange checks whether the given port is within valid port range
+func ValidatePortRange(port int) error {
+	if port > 0 && port <= 65535 {
+		return nil
 	}
+	return errors.Errorf("invalid port [%d] specified", port)
 }

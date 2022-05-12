@@ -14,11 +14,12 @@
 package config
 
 import (
-	"github.com/coreos/go-iptables/iptables"
-	"github.com/pkg/errors"
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/coreos/go-iptables/iptables"
+	"github.com/pkg/errors"
 )
 
 // IsValidCIDR checks whether the input is a valid CIDR block and returns the IP protocol and validity
@@ -52,18 +53,18 @@ func getProtocol(ip net.IP) (iptables.Protocol, bool) {
 	return iptables.ProtocolIPv4, false
 }
 
-// IsValidPort checks whether the port only has digits and is within valid port range
-func IsValidPort(p string) error {
+// ValidatePort checks whether the port only has digits and is within valid port range
+func ValidatePort(p string) error {
 	port := strings.TrimSpace(p)
 
 	if i, err := strconv.Atoi(port); err == nil {
-		return IsValidPortRange(i)
+		return ValidatePortRange(i)
 	}
 	return errors.Errorf("invalid port [%s] specified", p)
 }
 
-// IsValidPortRange checks whether the given port is within valid port range
-func IsValidPortRange(port int) error {
+// ValidatePortRange checks whether the given port is within valid port range
+func ValidatePortRange(port int) error {
 	if port > 0 && port <= 65535 {
 		return nil
 	}

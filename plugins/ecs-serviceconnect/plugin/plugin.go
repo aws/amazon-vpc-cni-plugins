@@ -14,7 +14,6 @@ package plugin
 
 import (
 	"github.com/aws/amazon-vpc-cni-plugins/cni"
-
 	cniVersion "github.com/containernetworking/cni/pkg/version"
 )
 

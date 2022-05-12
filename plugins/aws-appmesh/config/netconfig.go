@@ -16,15 +16,16 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	utils "github.com/aws/amazon-vpc-cni-plugins/plugins/utils/config"
-	"github.com/coreos/go-iptables/iptables"
 	"strings"
 
-	log "github.com/cihub/seelog"
+	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
 	cniTypes "github.com/containernetworking/cni/pkg/types"
 	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/current"
 	cniVersion "github.com/containernetworking/cni/pkg/version"
+
+	log "github.com/cihub/seelog"
+	"github.com/coreos/go-iptables/iptables"
 	"github.com/pkg/errors"
 )
 
@@ -142,23 +143,23 @@ func validateConfig(config netConfigJSON) error {
 	}
 
 	// Validate the format of all fields.
-	if err := utils.IsValidPort(config.ProxyEgressPort); err != nil {
+	if err := vpc.ValidatePort(config.ProxyEgressPort); err != nil {
 		return err
 	}
 	if config.ProxyIngressPort != "" {
-		if err := utils.IsValidPort(config.ProxyIngressPort); err != nil {
+		if err := vpc.ValidatePort(config.ProxyIngressPort); err != nil {
 			return err
 		}
 	}
 
 	for _, port := range config.AppPorts {
-		if err := utils.IsValidPort(port); err != nil {
+		if err := vpc.ValidatePort(port); err != nil {
 			return err
 		}
 	}
 
 	for _, port := range config.EgressIgnoredPorts {
-		if err := utils.IsValidPort(port); err != nil {
+		if err := vpc.ValidatePort(port); err != nil {
 			return err
 		}
 	}
@@ -176,7 +177,7 @@ func separateIPs(ignoredIPs []string) (string, string, error) {
 	var ipv4s, ipv6s []string
 	for _, ip := range ignoredIPs {
 		trimIP := strings.TrimSpace(ip)
-		proto, valid := utils.IsValidIPAddressOrCIDR(trimIP)
+		proto, valid := vpc.IsValidIPAddressOrCIDR(trimIP)
 		if !valid {
 			return "", "", errors.Errorf("invalid IP or CIDR block [%s] specified in egressIgnoredIPs", trimIP)
 		}

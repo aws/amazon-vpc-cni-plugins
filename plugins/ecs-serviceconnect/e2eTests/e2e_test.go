@@ -16,19 +16,22 @@
 package e2e
 
 import (
-	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
-	"github.com/aws/amazon-vpc-cni-plugins/plugins/ecs-serviceconnect/config"
-	testutils "github.com/aws/amazon-vpc-cni-plugins/plugins/utils/test"
-	"github.com/containernetworking/cni/pkg/invoke"
-	"github.com/containernetworking/cni/pkg/skel"
-	"github.com/coreos/go-iptables/iptables"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
+
+	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/ecs-serviceconnect/config"
+	testutils "github.com/aws/amazon-vpc-cni-plugins/plugins/utils/test"
+	"github.com/containernetworking/cni/pkg/invoke"
+	"github.com/containernetworking/cni/pkg/skel"
+	
+	"github.com/coreos/go-iptables/iptables"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -79,7 +82,7 @@ func loadTestData(t *testing.T, name string) []byte {
 	return bytes
 }
 
-// testValid verifies that cni ADD and DEL command succeed.
+// testValid verifies that CNI ADD and DEL command succeed.
 func testValid(t *testing.T, filename string) {
 	netConfData := loadTestData(t, filename)
 	netConf, err := config.New(&skel.CmdArgs{
@@ -107,7 +110,7 @@ func testValid(t *testing.T, filename string) {
 		pluginPath,
 		netConfData,
 		execInvokeArgs)
-	require.NoError(t, err, "Unable to execute ADD command for ecs-serviceconnect cni plugin")
+	require.NoError(t, err, "Unable to execute ADD command for ecs-serviceconnect CNI plugin")
 
 	targetNS.Run(func() error {
 		// Validate IP rules successfully added.
@@ -121,7 +124,7 @@ func testValid(t *testing.T, filename string) {
 		pluginPath,
 		netConfData,
 		execInvokeArgs)
-	require.NoError(t, err, "Unable to execute DEL command for ecs-serviceconnect cni plugin")
+	require.NoError(t, err, "Unable to execute DEL command for ecs-serviceconnect CNI plugin")
 
 	targetNS.Run(func() error {
 		// Validate IP rules successfully deleted.
@@ -137,21 +140,17 @@ func validateIPRulesAdded(t *testing.T, netConf *config.NetConfig) {
 		require.NoError(t, err, "Unable to initialize iptable")
 
 		validateIngressIptableRulesAdded(t, iptable, netConf,
-			mustExist && len(netConf.IngressRedirectToListenerPortMap) > 0)
+			mustExist && len(netConf.IngressListenerToInterceptPortMap) > 0)
 
-		//TODO: Add support for BRIDGE_TPROXY
-		switch netConf.Mode {
-		case config.AWSVPC, config.BRIDGE_DNAT:
-			validateEgressIptableRulesAdded(t, iptable, proto, netConf,
-				mustExist && netConf.EgressPort != 0)
-		}
+		validateEgressIptableRulesAdded(t, iptable, proto, netConf,
+			mustExist && netConf.EgressPort != 0)
 	}
 }
 
 // validateIngressIptableRulesAdded validates the IP table rules that are added for handling ingress traffic
 func validateIngressIptableRulesAdded(t *testing.T, iptable *iptables.IPTables, netConf *config.NetConfig, mustExist bool) {
-	for redirectPort, listenerPorts := range netConf.IngressRedirectToListenerPortMap {
-		exist, _ := iptable.Exists("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", listenerPorts,
+	for redirectPort, listenerPort := range netConf.IngressListenerToInterceptPortMap {
+		exist, _ := iptable.Exists("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", listenerPort,
 			"-j", "REDIRECT", "--to-port", redirectPort)
 		require.Equal(t, mustExist, exist, "Mismatch of expected rules to redirect ingress ports")
 
@@ -165,9 +164,9 @@ func validateIngressIptableRulesAdded(t *testing.T, iptable *iptables.IPTables, 
 func getCidr(proto iptables.Protocol, netConf *config.NetConfig) string {
 	var cidr string
 	if proto == iptables.ProtocolIPv4 {
-		cidr = netConf.EgressIPV4CIDR
+		cidr = netConf.EgressIPv4CIDR
 	} else {
-		cidr = netConf.EgressIPV6CIDR
+		cidr = netConf.EgressIPv6CIDR
 	}
 	return cidr
 }
@@ -183,10 +182,10 @@ func validateEgressIptableRulesAdded(t *testing.T, iptable *iptables.IPTables, p
 // getProto returns map of protocol and whether it needs to be handled
 func getProto(netConf *config.NetConfig) map[iptables.Protocol]bool {
 	protoMap := make(map[iptables.Protocol]bool)
-	if netConf.EgressIPV4CIDR != "" {
+	if netConf.EgressIPv4CIDR != "" {
 		protoMap[iptables.ProtocolIPv4] = true
 	}
-	if netConf.EgressIPV6CIDR != "" {
+	if netConf.EgressIPv6CIDR != "" {
 		protoMap[iptables.ProtocolIPv4] = true
 	}
 	return protoMap
@@ -200,17 +199,13 @@ func validateIPRulesDeleted(t *testing.T, netConf *config.NetConfig) {
 
 		validateIngressIptableRulesDeleted(t, iptable, netConf)
 
-		//TODO: Add support for BRIDGE_TPROXY
-		switch netConf.Mode {
-		case config.AWSVPC, config.BRIDGE_DNAT:
-			validateEgressIptableRulesDeleted(t, iptable, proto, netConf)
-		}
+		validateEgressIptableRulesDeleted(t, iptable, proto, netConf)
 	}
 }
 
 // validateIngressIptableRulesDeleted validates that the ingress IP rules do not exist
 func validateIngressIptableRulesDeleted(t *testing.T, iptable *iptables.IPTables, netConf *config.NetConfig) {
-	for redirectPort, listenerPorts := range netConf.IngressRedirectToListenerPortMap {
+	for redirectPort, listenerPorts := range netConf.IngressListenerToInterceptPortMap {
 		exist, _ := iptable.Exists("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", listenerPorts,
 			"-j", "REDIRECT", "--to-port", redirectPort)
 		require.False(t, exist, "Found unexpected rules to redirect ingress ports")
@@ -236,21 +231,20 @@ func TestInvalid(t *testing.T) {
 
 	testutils.SetupPluginEnvironment(t, "ecs-serviceconnect")
 	for filename, error := range map[string]string{
-		"invalid_egress_ipv4_cidr_1":            "missing required parameter: EgressConfig IPV4 VIP CIDR Address",
+		"invalid_egress_ipv4_cidr_1":            "missing required parameter: EgressConfig IPv4 CIDR Address",
 		"invalid_egress_ipv4_cidr_2":            "invalid parameter: EgressConfig IPv4 CIDR Address",
 		"invalid_egress_ipv6_cidr_1":            "invalid parameter: EgressConfig IPv6 CIDR Address",
 		"invalid_egress_ipv6_cidr_2":            "invalid parameter: EgressConfig IPv6 CIDR Address",
 		"invalid_egress_listener_port":          "invalid port [-1] specified",
 		"invalid_empty_egress":                  "invalid port [0] specified",
-		"invalid_empty_egress_vip":              "missing required parameter: EgressConfig IPV4 VIP CIDR Address",
+		"invalid_empty_egress_vip":              "missing required parameter: EgressConfig IPv4 CIDR Address",
 		"invalid_ingress_intercept_port":        "invalid port [-1] specified",
 		"invalid_ingress_listener_port":         "invalid port [80000] specified",
 		"invalid_missing_egress_listener_port":  "invalid port [0] specified",
 		"invalid_missing_egress_vip":            "missing required parameter: EgressConfig VIP",
 		"invalid_missing_ingress_egress":        "either IngressConfig or EgressConfig must be present",
 		"invalid_missing_ingress_listener_port": "invalid port [0] specified",
-		"invalid_missing_network":               "missing required parameter: NetworkConfig",
-		"invalid_network":                       "invalid value for NetworkConfig",
+		"invalid_v6_missing_egress_vip":         "missing EgressConfig IPv6 CIDR Address",
 	} {
 		t.Run(filename, func(t *testing.T) {
 			testInvalid(t, filename, error)
@@ -283,6 +277,6 @@ func testInvalid(t *testing.T,
 		pluginPath,
 		netConfData,
 		execInvokeArgs)
-	assert.EqualError(t, err, error)
+	assert.EqualError(t, errors.New(error), err.Error())
 
 }

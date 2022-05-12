@@ -16,6 +16,5 @@
   "egressConfig": {
     "listenerName": "outbound_listener",
     "listenerPort": 30002
-  },
-  "networkMode": "awsvpc"
+  }
 }
