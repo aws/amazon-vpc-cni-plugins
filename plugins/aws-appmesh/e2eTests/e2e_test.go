@@ -11,7 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build e2e_test
+// +build e2e_test aws_appmesh
 
 package e2e
 
