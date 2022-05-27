@@ -16,20 +16,19 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
+	"net"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
+
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
 	cniTypes "github.com/containernetworking/cni/pkg/types"
-
 	"github.com/coreos/go-iptables/iptables"
 )
 
 // NetConfig defines the network configuration for the ecs-serviceconnect CNI plugin.
 type NetConfig struct {
 	cniTypes.NetConf
-	IngressListenerToInterceptPortMap map[string]string
+	IngressListenerToInterceptPortMap map[int]int
 	EgressPort                        int
 	EgressIPv4CIDR                    string
 	EgressIPv6CIDR                    string
@@ -38,9 +37,19 @@ type NetConfig struct {
 
 // netConfigJSON defines the network configuration JSON file format for the ecs-serviceconnect CNI plugin.
 type netConfigJSON struct {
+	/**
+	 * ingressConfig (optional) specifies the netfilter rules to be set for incoming requests.
+	 * egressConfig (optional) specifies the netfilter rules to be set for outgoing requests.
+	 * enableIPv4 (optional) specifies whether to set the rules in IPV4 table. Note that this
+	 * cannot be inferred from egressConfig since it is optional. Default value is false.
+	 * Note that this needs to be specified for both dual-stack and V4-only traffic.
+	 * enableIPv6 (optional) specifies whether to set the rules in IPV6 table. Default value is false.
+	 * Note that this needs to be specified for both dual-stack and V6-only traffic.
+	 */
 	cniTypes.NetConf
 	IngressConfig []ingressConfigJSONEntry `json:"ingressConfig"`
 	EgressConfig  *egressConfigJSON        `json:"egressConfig"`
+	EnableIPv4    bool                     `json:"enableIPv4"`
 	EnableIPv6    bool                     `json:"enableIPv6"`
 }
 
@@ -70,25 +79,25 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		return nil, fmt.Errorf("failed to parse network config: %v", err)
 	}
 
-	// Validate the configuration.
-	if err := validateConfig(config); err != nil {
+	// Parse the configuration.
+	return parseConfig(&config)
+}
+
+// parseConfig parses the given network configuration and returns the in-memory model and any error in parsing.
+func parseConfig(config *netConfigJSON) (*NetConfig, error) {
+	if len(config.IngressConfig) == 0 && config.EgressConfig == nil {
+		return nil, fmt.Errorf("either IngressConfig or EgressConfig must be present")
+	}
+	if !config.EnableIPv4 && !config.EnableIPv6 {
+		return nil, fmt.Errorf("both V4 and V6 cannot be disabled")
+	}
+	ingressListenerToInterceptPortMap, err := parseIngressConfig(config)
+	if err != nil {
 		return nil, err
 	}
-
-	// Parse ingress and construct a listener map
-	ingressListenerToInterceptPortMap := make(map[string]string)
-	for _, s := range config.IngressConfig {
-		if s.InterceptPort != 0 {
-			ingressListenerToInterceptPortMap[strconv.Itoa(s.ListenerPort)] = strconv.Itoa(s.InterceptPort)
-		}
-	}
-	// Parse egress
-	egressPort := 0
-	var egressIPv4CIDR, egressIPv6CIDR string
-	if config.EgressConfig != nil {
-		egressPort = config.EgressConfig.ListenerPort
-		egressIPv4CIDR = config.EgressConfig.VIP.IPv4CIDR
-		egressIPv6CIDR = config.EgressConfig.VIP.IPv6CIDR
+	egressPort, egressIPv4CIDR, egressIPv6CIDR, err := parseEgressConfig(config)
+	if err != nil {
+		return nil, err
 	}
 
 	// Populate NetConfig.
@@ -100,77 +109,77 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		EgressIPv6CIDR:                    egressIPv6CIDR,
 		IPProtocols:                       getIPProtocols(config),
 	}
+
 	return &netConfig, nil
 }
 
-// validateConfig validates the given network configuration.
-func validateConfig(config netConfigJSON) error {
-	if len(config.IngressConfig) == 0 && config.EgressConfig == nil {
-		return fmt.Errorf("either IngressConfig or EgressConfig must be present")
-	}
-
-	if err := validateIngressConfig(config); err != nil {
-		return err
-	}
-	if config.EgressConfig != nil {
-		if err := validateEgressConfig(config); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// validateIngressConfig validates Ingress Configuration
-func validateIngressConfig(config netConfigJSON) error {
+// parseIngressConfig parses Ingress Configuration and returns a map of listener port to intercept port.
+func parseIngressConfig(config *netConfigJSON) (map[int]int, error) {
+	ingressListenerToInterceptPortMap := make(map[int]int)
 	for _, s := range config.IngressConfig {
 		// verify that the ports are valid
 		if err := vpc.ValidatePortRange(s.ListenerPort); err != nil {
-			return err
+			return nil, err
 		}
 		if s.InterceptPort != 0 {
-			return vpc.ValidatePortRange(s.InterceptPort)
+			if err := vpc.ValidatePortRange(s.InterceptPort); err != nil {
+				return nil, err
+			}
+			ingressListenerToInterceptPortMap[s.ListenerPort] = s.InterceptPort
 		}
 	}
-	return nil
+	return ingressListenerToInterceptPortMap, nil
 }
 
-// validateEgressConfig validates the egress configuration
-func validateEgressConfig(config netConfigJSON) error {
-	// verify that the port is valid
+// parseEgressConfig parses the egress configuration and returns the egress listener port and the V4 & V6 CIDR range.
+func parseEgressConfig(config *netConfigJSON) (int, string, string, error) {
+	if config.EgressConfig == nil {
+		return 0, "", "", nil
+	}
+
+	// Verify that the port is valid.
 	if err := vpc.ValidatePortRange(config.EgressConfig.ListenerPort); err != nil {
-		return err
+		return 0, "", "", err
 	}
 
-	// verify that the egress vip is a valid CIDR
-	var egressVIPConfig = config.EgressConfig.VIP
+	// Verify that the egress vip is a valid CIDR.
+	egressVIPConfig := config.EgressConfig.VIP
 	if egressVIPConfig == nil {
-		return fmt.Errorf("missing required parameter: EgressConfig VIP")
-	}
-	if egressVIPConfig.IPv4CIDR == "" {
-		return fmt.Errorf("missing required parameter: EgressConfig IPv4 CIDR Address")
+		return 0, "", "", fmt.Errorf("missing required parameter: EgressConfig VIP")
 	}
 
-	trimCIDR := strings.TrimSpace(egressVIPConfig.IPv4CIDR)
-	if proto, valid := vpc.IsValidCIDR(trimCIDR); !valid || proto != iptables.ProtocolIPv4 {
-		return fmt.Errorf("invalid parameter: EgressConfig IPv4 CIDR Address")
+	// Verify that atleast one of the egress CIDRs are set.
+	if egressVIPConfig.IPv4CIDR == "" && egressVIPConfig.IPv6CIDR == "" {
+		return 0, "", "", fmt.Errorf("missing required parameter: EgressConfig VIP CIDR")
 	}
 
-	if config.EnableIPv6 {
-		trimCIDR := strings.TrimSpace(egressVIPConfig.IPv6CIDR)
-		if trimCIDR == "" {
-			return fmt.Errorf("missing EgressConfig IPv6 CIDR Address")
-		}
-		if proto, valid := vpc.IsValidCIDR(trimCIDR); !valid || proto != iptables.ProtocolIPv6 {
-			return fmt.Errorf("invalid parameter: EgressConfig IPv6 CIDR Address")
+	// Verify that the CIDR is set for the respective IP version.
+	if (config.EnableIPv4 && egressVIPConfig.IPv4CIDR == "") ||
+		(config.EnableIPv6 && egressVIPConfig.IPv6CIDR == "") {
+		return 0, "", "", fmt.Errorf("missing required parameter: EgressConfig VIP CIDR")
+	}
+
+	// Verify the value of IPV4 CIDR.
+	if egressVIPConfig.IPv4CIDR != "" {
+		if ip, _, err := net.ParseCIDR(egressVIPConfig.IPv4CIDR); err != nil || ip.To4() == nil {
+			return 0, "", "", fmt.Errorf("invalid parameter: EgressConfig IPv4 CIDR Address")
 		}
 	}
-	return nil
+	// Verify the value of IPV6 CIDR.
+	if egressVIPConfig.IPv6CIDR != "" {
+		if ip, _, err := net.ParseCIDR(egressVIPConfig.IPv6CIDR); err != nil || ip.To16() == nil {
+			return 0, "", "", fmt.Errorf("invalid parameter: EgressConfig IPv6 CIDR Address")
+		}
+	}
+	return config.EgressConfig.ListenerPort, config.EgressConfig.VIP.IPv4CIDR, config.EgressConfig.VIP.IPv6CIDR, nil
 }
 
-// getIPProtocols returns the IP protocols that need to be handled for the config
-func getIPProtocols(config netConfigJSON) []iptables.Protocol {
+// getIPProtocols returns the IP protocols that need to be handled for the config.
+func getIPProtocols(config *netConfigJSON) []iptables.Protocol {
 	var ipProtos []iptables.Protocol
-	ipProtos = append(ipProtos, iptables.ProtocolIPv4)
+	if config.EnableIPv4 {
+		ipProtos = append(ipProtos, iptables.ProtocolIPv4)
+	}
 	if config.EnableIPv6 {
 		ipProtos = append(ipProtos, iptables.ProtocolIPv6)
 	}

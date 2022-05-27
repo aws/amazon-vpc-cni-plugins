@@ -22,14 +22,13 @@ import (
 	"testing"
 
 	"github.com/containernetworking/cni/pkg/skel"
-
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/stretchr/testify/assert"
 )
 
 type testConfig struct {
 	filePath      string
-	ingressMap    map[string]string
+	ingressMap    map[int]int
 	egressPort    int
 	egressIpv4Vip string
 	egressIpv6Vip string
@@ -54,21 +53,21 @@ func TestValidConfigs(t *testing.T) {
 	for _, config := range []testConfig{
 		{
 			filePath:      "valid_empty_ingress",
-			ingressMap:    map[string]string{},
+			ingressMap:    map[int]int{},
 			egressPort:    30002,
 			egressIpv4Vip: "127.255.0.0/16",
 			protos:        []iptables.Protocol{iptables.ProtocolIPv4},
 		},
 		{
 			filePath:      "valid_ingress_with_port_intercept_1",
-			ingressMap:    map[string]string{"30000": "8080", "30001": "8090"},
+			ingressMap:    map[int]int{30000: 8080, 30001: 8090},
 			egressPort:    30002,
 			egressIpv4Vip: "127.255.0.0/16",
 			protos:        []iptables.Protocol{iptables.ProtocolIPv4},
 		},
 		{
 			filePath:      "valid_ingress_with_port_intercept_2",
-			ingressMap:    map[string]string{"30000": "8080"},
+			ingressMap:    map[int]int{30000: 8080},
 			egressPort:    30002,
 			egressIpv4Vip: "127.255.0.0/16",
 			egressIpv6Vip: "2002::1234:abcd:ffff:c0a8:101/64",
@@ -76,7 +75,7 @@ func TestValidConfigs(t *testing.T) {
 		},
 		{
 			filePath:      "valid_ingress_without_port_intercept",
-			ingressMap:    map[string]string{"30000": "8080"},
+			ingressMap:    map[int]int{},
 			egressPort:    30002,
 			egressIpv4Vip: "127.255.0.0/16",
 			egressIpv6Vip: "2002::1234:abcd:ffff:c0a8:101/64",
@@ -84,13 +83,13 @@ func TestValidConfigs(t *testing.T) {
 		},
 		{
 			filePath:   "valid_without_egress",
-			ingressMap: map[string]string{},
+			ingressMap: map[int]int{},
 			egressPort: 0,
 			protos:     []iptables.Protocol{iptables.ProtocolIPv4},
 		},
 		{
 			filePath:      "valid_without_ingress",
-			ingressMap:    map[string]string{},
+			ingressMap:    map[int]int{},
 			egressPort:    30002,
 			egressIpv4Vip: "127.255.0.0/16",
 			protos:        []iptables.Protocol{iptables.ProtocolIPv4},
@@ -116,7 +115,7 @@ func TestInvalidConfigs(t *testing.T) {
 		"invalid_egress_ipv6_cidr_2", "invalid_egress_listener_port", "invalid_empty_egress",
 		"invalid_empty_egress_vip", "invalid_ingress_intercept_port", "invalid_ingress_listener_port",
 		"invalid_missing_egress_listener_port", "invalid_missing_egress_vip", "invalid_missing_ingress_egress",
-		"invalid_missing_ingress_listener_port", "invalid_v6_missing_egress_vip",
+		"invalid_missing_ingress_listener_port", "invalid_missing_ip", "invalid_v6_missing_egress_vip",
 	} {
 		args := &skel.CmdArgs{
 			StdinData: []byte(loadTestData(t, config)),

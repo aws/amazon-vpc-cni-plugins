@@ -10,5 +10,6 @@
       "listenerName": "inbound_bcd",
       "listenerPort": 30001
     }
-  ]
+  ],
+  "enableIPV4": true
 }

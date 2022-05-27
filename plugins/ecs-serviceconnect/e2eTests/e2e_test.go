@@ -11,12 +11,12 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build e2e_test, ecs_serviceconnect
+// +build e2e_test ecs_serviceconnect
 
 package e2e
 
 import (
-	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -25,21 +25,21 @@ import (
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/ecs-serviceconnect/config"
-	testutils "github.com/aws/amazon-vpc-cni-plugins/plugins/utils/test"
+
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
-	
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	nsName       = "testNS"
+	nsName       = "ecs-sc-testNS"
 	containerID  = "contain-er"
 	ifName       = "test"
 	ingressChain = "ECS_SERVICE_CONNECT_INGRESS"
 	egressChain  = "ECS_SERVICE_CONNECT_EGRESS"
+	pluginName   = "ecs-serviceconnect"
 )
 
 var (
@@ -49,10 +49,15 @@ var (
 // TestValid tests when network configuration is valid.
 func TestValid(t *testing.T) {
 	var err error
-	pluginPath, err = invoke.FindInPath("ecs-serviceconnect", []string{os.Getenv("CNI_PATH")})
-	require.NoError(t, err, "Unable to find ecs-serviceconnect plugin in path")
+	pluginPath, err = invoke.FindInPath(pluginName, []string{os.Getenv("CNI_PATH")})
+	require.NoError(t, err, fmt.Sprintf("Unable to find %s plugin in path", pluginName))
 
-	testutils.SetupPluginEnvironment(t, "ecs-serviceconnect")
+	testLogDir, preserve := setupLogs(t, "TestValid")
+	defer func(preserve bool) {
+		if !t.Failed() && !preserve {
+			os.RemoveAll(testLogDir)
+		}
+	}(preserve)
 
 	for _, filename := range []string{
 		"valid_empty_ingress",
@@ -64,6 +69,42 @@ func TestValid(t *testing.T) {
 	} {
 		t.Run(filename, func(t *testing.T) {
 			testValid(t, filename)
+		})
+	}
+}
+
+// TestInvalid tests when network configuration is invalid.
+func TestInvalid(t *testing.T) {
+	var err error
+	pluginPath, err = invoke.FindInPath(pluginName, []string{os.Getenv("CNI_PATH")})
+	require.NoError(t, err, fmt.Sprintf("Unable to find %s plugin in path", pluginName))
+
+	testLogDir, preserve := setupLogs(t, "TestInValid")
+	defer func(preserve bool) {
+		if !t.Failed() && !preserve {
+			os.RemoveAll(testLogDir)
+		}
+	}(preserve)
+
+	for filename, errorMsg := range map[string]string{
+		"invalid_egress_ipv4_cidr_1":            "invalid parameter: EgressConfig IPv4 CIDR Address",
+		"invalid_egress_ipv4_cidr_2":            "invalid parameter: EgressConfig IPv4 CIDR Address",
+		"invalid_egress_ipv6_cidr_1":            "invalid parameter: EgressConfig IPv6 CIDR Address",
+		"invalid_egress_ipv6_cidr_2":            "invalid parameter: EgressConfig IPv6 CIDR Address",
+		"invalid_egress_listener_port":          "invalid port [-1] specified",
+		"invalid_empty_egress":                  "invalid port [0] specified",
+		"invalid_empty_egress_vip":              "missing required parameter: EgressConfig VIP CIDR",
+		"invalid_ingress_intercept_port":        "invalid port [-1] specified",
+		"invalid_ingress_listener_port":         "invalid port [80000] specified",
+		"invalid_missing_egress_listener_port":  "invalid port [0] specified",
+		"invalid_missing_egress_vip":            "missing required parameter: EgressConfig VIP",
+		"invalid_missing_ingress_egress":        "either IngressConfig or EgressConfig must be present",
+		"invalid_missing_ingress_listener_port": "invalid port [0] specified",
+		"invalid_v6_missing_egress_vip":         "missing required parameter: EgressConfig VIP CIDR",
+		"invalid_missing_ip":                    "both V4 and V6 cannot be disabled",
+	} {
+		t.Run(filename, func(t *testing.T) {
+			testInvalid(t, filename, errorMsg)
 		})
 	}
 }
@@ -147,11 +188,11 @@ func validateIPRulesAdded(t *testing.T, netConf *config.NetConfig) {
 	}
 }
 
-// validateIngressIptableRulesAdded validates the IP table rules that are added for handling ingress traffic
+// validateIngressIptableRulesAdded validates the IP table rules that are added for handling ingress traffic.
 func validateIngressIptableRulesAdded(t *testing.T, iptable *iptables.IPTables, netConf *config.NetConfig, mustExist bool) {
 	for redirectPort, listenerPort := range netConf.IngressListenerToInterceptPortMap {
-		exist, _ := iptable.Exists("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", listenerPort,
-			"-j", "REDIRECT", "--to-port", redirectPort)
+		exist, _ := iptable.Exists("nat", ingressChain, "-p", "tcp", "--dport", strconv.Itoa(listenerPort),
+			"-j", "REDIRECT", "--to-port", strconv.Itoa(redirectPort))
 		require.Equal(t, mustExist, exist, "Mismatch of expected rules to redirect ingress ports")
 
 		exist, _ = iptable.Exists("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!",
@@ -160,7 +201,7 @@ func validateIngressIptableRulesAdded(t *testing.T, iptable *iptables.IPTables, 
 	}
 }
 
-// getCidr returns the Cidr for the protocol
+// getCidr returns the Cidr for the protocol.
 func getCidr(proto iptables.Protocol, netConf *config.NetConfig) string {
 	var cidr string
 	if proto == iptables.ProtocolIPv4 {
@@ -171,15 +212,14 @@ func getCidr(proto iptables.Protocol, netConf *config.NetConfig) string {
 	return cidr
 }
 
-// validateEgressIptableRulesAdded validates the IP table rules that are added for handling egress traffic
+// validateEgressIptableRulesAdded validates the IP table rules that are added for handling egress traffic.
 func validateEgressIptableRulesAdded(t *testing.T, iptable *iptables.IPTables, proto iptables.Protocol, netConf *config.NetConfig, mustExist bool) {
-
 	exist, _ := iptable.Exists("nat", "OUTPUT", "-p", "tcp", "-d", getCidr(proto, netConf),
 		"-j", "REDIRECT", "--to-port", strconv.Itoa(netConf.EgressPort))
 	require.Equal(t, mustExist, exist, "Mismatch in expected rules to redirect ports")
 }
 
-// getProto returns map of protocol and whether it needs to be handled
+// getProto returns map of protocol and whether it needs to be handled.
 func getProto(netConf *config.NetConfig) map[iptables.Protocol]bool {
 	protoMap := make(map[iptables.Protocol]bool)
 	if netConf.EgressIPv4CIDR != "" {
@@ -203,11 +243,11 @@ func validateIPRulesDeleted(t *testing.T, netConf *config.NetConfig) {
 	}
 }
 
-// validateIngressIptableRulesDeleted validates that the ingress IP rules do not exist
+// validateIngressIptableRulesDeleted validates that the ingress IP rules do not exist.
 func validateIngressIptableRulesDeleted(t *testing.T, iptable *iptables.IPTables, netConf *config.NetConfig) {
-	for redirectPort, listenerPorts := range netConf.IngressListenerToInterceptPortMap {
-		exist, _ := iptable.Exists("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", listenerPorts,
-			"-j", "REDIRECT", "--to-port", redirectPort)
+	for redirectPort, listenerPort := range netConf.IngressListenerToInterceptPortMap {
+		exist, _ := iptable.Exists("nat", ingressChain, "-p", "tcp", "--dport", strconv.Itoa(listenerPort),
+			"-j", "REDIRECT", "--to-port", strconv.Itoa(redirectPort))
 		require.False(t, exist, "Found unexpected rules to redirect ingress ports")
 
 		exist, _ = iptable.Exists("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!",
@@ -216,6 +256,7 @@ func validateIngressIptableRulesDeleted(t *testing.T, iptable *iptables.IPTables
 	}
 }
 
+// validateEgressIptableRulesDeleted validates that the egress IP rules do not exist.
 func validateEgressIptableRulesDeleted(t *testing.T, iptable *iptables.IPTables, proto iptables.Protocol, netConf *config.NetConfig) {
 
 	exist, _ := iptable.Exists("nat", "OUTPUT", "-p", "tcp", "-d", getCidr(proto, netConf),
@@ -223,38 +264,10 @@ func validateEgressIptableRulesDeleted(t *testing.T, iptable *iptables.IPTables,
 	require.False(t, exist, "Found unexpected rules to redirect cidr")
 }
 
-// TestInvalid tests when network configuration is invalid.
-func TestInvalid(t *testing.T) {
-	var err error
-	pluginPath, err = invoke.FindInPath("ecs-serviceconnect", []string{os.Getenv("CNI_PATH")})
-	require.NoError(t, err, "Unable to find ecs-serviceconnect plugin in path")
-
-	testutils.SetupPluginEnvironment(t, "ecs-serviceconnect")
-	for filename, error := range map[string]string{
-		"invalid_egress_ipv4_cidr_1":            "missing required parameter: EgressConfig IPv4 CIDR Address",
-		"invalid_egress_ipv4_cidr_2":            "invalid parameter: EgressConfig IPv4 CIDR Address",
-		"invalid_egress_ipv6_cidr_1":            "invalid parameter: EgressConfig IPv6 CIDR Address",
-		"invalid_egress_ipv6_cidr_2":            "invalid parameter: EgressConfig IPv6 CIDR Address",
-		"invalid_egress_listener_port":          "invalid port [-1] specified",
-		"invalid_empty_egress":                  "invalid port [0] specified",
-		"invalid_empty_egress_vip":              "missing required parameter: EgressConfig IPv4 CIDR Address",
-		"invalid_ingress_intercept_port":        "invalid port [-1] specified",
-		"invalid_ingress_listener_port":         "invalid port [80000] specified",
-		"invalid_missing_egress_listener_port":  "invalid port [0] specified",
-		"invalid_missing_egress_vip":            "missing required parameter: EgressConfig VIP",
-		"invalid_missing_ingress_egress":        "either IngressConfig or EgressConfig must be present",
-		"invalid_missing_ingress_listener_port": "invalid port [0] specified",
-		"invalid_v6_missing_egress_vip":         "missing EgressConfig IPv6 CIDR Address",
-	} {
-		t.Run(filename, func(t *testing.T) {
-			testInvalid(t, filename, error)
-		})
-	}
-}
-
+// testInvalid tests whether the test file returns the given error.
 func testInvalid(t *testing.T,
 	filename string,
-	error string) {
+	errorMsg string) {
 	netConfData := loadTestData(t, filename)
 
 	// Create a network namespace to mimic the container's network namespace.
@@ -277,6 +290,32 @@ func testInvalid(t *testing.T,
 		pluginPath,
 		netConfData,
 		execInvokeArgs)
-	assert.EqualError(t, errors.New(error), err.Error())
+	assert.EqualError(t, err, errorMsg)
+}
 
+// getEnvOrDefault gets the value of an env var. It returns the fallback value
+// if the env var is not set.
+func getEnvOrDefault(name string, fallback string) string {
+	val := os.Getenv(name)
+	if val == "" {
+		return fallback
+	}
+	return val
+}
+
+// setupLogs sets up the log environment for cni executable and returns the log directory
+// and a bool that represents whether to preserve logfiles after execution.
+func setupLogs(t *testing.T, testCase string) (string, bool) {
+	// Create a directory for storing test logs.
+	testLogDir, err := ioutil.TempDir("", pluginName+"-cni-e2eTests-test")
+	require.NoError(t, err, "Unable to create directory for storing test logs")
+
+	// Configure the env var to use the test logs directory.
+	os.Setenv("VPC_CNI_LOG_FILE", fmt.Sprintf("%s/%s.log", testLogDir, testCase))
+	t.Logf("Using %s for test logs", testLogDir)
+
+	// Handle deletion of test logs at the end of the test execution if specified.
+	ok, err := strconv.ParseBool(getEnvOrDefault("ECS_PRESERVE_E2E_TEST_LOGS", "false"))
+	assert.NoError(t, err, "Unable to parse ECS_PRESERVE_E2E_TEST_LOGS env var")
+	return testLogDir, ok
 }

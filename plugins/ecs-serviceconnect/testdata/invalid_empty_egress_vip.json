@@ -18,5 +18,6 @@
     "listenerPort": 30002,
     "vip": {
     }
-  }
+  },
+  "enableIPV4": true
 }

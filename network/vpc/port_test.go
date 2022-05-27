@@ -11,7 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build !integration_test,!e2e_test
+// +build !integration_test !e2e_test
 
 package vpc
 

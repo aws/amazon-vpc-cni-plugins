@@ -16,16 +16,15 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
 
-	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
+	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
 	cniTypes "github.com/containernetworking/cni/pkg/types"
 	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/current"
 	cniVersion "github.com/containernetworking/cni/pkg/version"
-
-	log "github.com/cihub/seelog"
-	"github.com/coreos/go-iptables/iptables"
 	"github.com/pkg/errors"
 )
 
@@ -60,7 +59,9 @@ type netConfigJSON struct {
 }
 
 const (
-	splitter = ","
+	splitter  = ","
+	ipv4Proto = "IPv4"
+	ipv6Proto = "IPv6"
 )
 
 // New creates a new NetConfig object by parsing the given CNI arguments.
@@ -143,23 +144,21 @@ func validateConfig(config netConfigJSON) error {
 	}
 
 	// Validate the format of all fields.
-	if err := vpc.ValidatePort(config.ProxyEgressPort); err != nil {
+	if err := isValidPort(config.ProxyEgressPort); err != nil {
 		return err
 	}
-	if config.ProxyIngressPort != "" {
-		if err := vpc.ValidatePort(config.ProxyIngressPort); err != nil {
-			return err
-		}
+	if err := isValidPort(config.ProxyIngressPort); err != nil {
+		return err
 	}
 
 	for _, port := range config.AppPorts {
-		if err := vpc.ValidatePort(port); err != nil {
+		if err := isValidPort(port); err != nil {
 			return err
 		}
 	}
 
 	for _, port := range config.EgressIgnoredPorts {
-		if err := vpc.ValidatePort(port); err != nil {
+		if err := isValidPort(port); err != nil {
 			return err
 		}
 	}
@@ -177,12 +176,12 @@ func separateIPs(ignoredIPs []string) (string, string, error) {
 	var ipv4s, ipv6s []string
 	for _, ip := range ignoredIPs {
 		trimIP := strings.TrimSpace(ip)
-		proto, valid := vpc.IsValidIPAddressOrCIDR(trimIP)
+		proto, valid := isValidIPAddressOrCIDR(trimIP)
 		if !valid {
 			return "", "", errors.Errorf("invalid IP or CIDR block [%s] specified in egressIgnoredIPs", trimIP)
 		}
 
-		if proto == iptables.ProtocolIPv4 {
+		if proto == ipv4Proto {
 			ipv4s = append(ipv4s, trimIP)
 		} else {
 			ipv6s = append(ipv6s, trimIP)
@@ -190,4 +189,38 @@ func separateIPs(ignoredIPs []string) (string, string, error) {
 
 	}
 	return strings.Join(ipv4s, splitter), strings.Join(ipv6s, splitter), nil
+}
+
+// isValidPort checks whether the port only has digits.
+func isValidPort(port string) error {
+	if port == "" {
+		return nil
+	}
+
+	i, err := strconv.Atoi(port)
+	if err == nil && i > 0 {
+		return nil
+	}
+
+	return errors.Errorf("invalid port [%s] specified", port)
+}
+
+// isValidIPAddressOrCIDR checks whether the input is a valid IP addresses/CIDR block and checks the IP protocol.
+func isValidIPAddressOrCIDR(address string) (string, bool) {
+	ip := net.ParseIP(address)
+	var err error
+	if ip == nil {
+		// Check whether it is a valid CIDR block.
+		ip, _, err = net.ParseCIDR(address)
+		if err != nil {
+			return "", false
+		}
+	}
+
+	// There's no To6() method in the `net` package. Instead, just check that
+	// it's not a valid `v4` IP.
+	if ip.To4() != nil {
+		return ipv4Proto, true
+	}
+	return ipv6Proto, true
 }

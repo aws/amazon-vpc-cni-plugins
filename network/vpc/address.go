@@ -15,8 +15,6 @@ package vpc
 
 import (
 	"net"
-
-	"github.com/coreos/go-iptables/iptables"
 )
 
 // GetIPAddressFromString converts an IP address CIDR string to a net.IPNet structure.
@@ -64,35 +62,4 @@ func ListContainsIPv6Address(ipAddresses []net.IPNet) bool {
 		}
 	}
 	return false
-}
-
-// IsValidCIDR checks whether the input is a valid CIDR block and returns the IP protocol and validity
-func IsValidCIDR(cidr string) (iptables.Protocol, bool) {
-	// Check whether it is a valid CIDR block.
-	ip, _, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return iptables.ProtocolIPv4, false
-	}
-	return getProtocol(ip)
-}
-
-// IsValidIPAddressOrCIDR checks whether the input is a valid IP addresses/CIDR block and returns the IP protocol and validity
-func IsValidIPAddressOrCIDR(address string) (iptables.Protocol, bool) {
-	ip := net.ParseIP(address)
-	if ip == nil {
-		// Check whether it is a valid CIDR block.
-		return IsValidCIDR(address)
-	}
-	return getProtocol(ip)
-}
-
-// getProtocol returns the IP protocol and validity of the given input
-func getProtocol(ip net.IP) (iptables.Protocol, bool) {
-	if ip.To4() != nil {
-		return iptables.ProtocolIPv4, true
-	}
-	if ip.To16() != nil {
-		return iptables.ProtocolIPv6, true
-	}
-	return iptables.ProtocolIPv4, false
 }

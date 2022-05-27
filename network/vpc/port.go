@@ -20,17 +20,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ValidatePort checks whether the port only has digits and is within valid port range
+// ValidatePort checks whether the port only has digits and is within valid port range.
 func ValidatePort(p string) error {
 	port := strings.TrimSpace(p)
 
-	if i, err := strconv.Atoi(port); err == nil {
-		return ValidatePortRange(i)
+	if t, err := strconv.ParseUint(port, 10, 16); err != nil || t == 0 {
+		return errors.Errorf("invalid port [%s] specified", p)
 	}
-	return errors.Errorf("invalid port [%s] specified", p)
+	return nil
 }
 
-// ValidatePortRange checks whether the given port is within valid port range
+// ValidatePortRange checks whether the given port is within valid port range.
 func ValidatePortRange(port int) error {
 	if port > 0 && port <= 65535 {
 		return nil

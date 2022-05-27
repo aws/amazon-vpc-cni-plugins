@@ -18,8 +18,9 @@
     "listenerPort": 30002,
     "vip": {
       "ipv4Cidr": "127.255.0.0/16",
-      "ipv6Cidr": "127.255.0.0/16"
+      "ipv6Cidr": "127.255.0.0"
     }
   },
+  "enableIPV4": true,
   "enableIPv6": true
 }

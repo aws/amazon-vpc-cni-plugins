@@ -21,5 +21,6 @@
       "ipv6Cidr": "2002::1234:abcd:ffff:c0a8:101"
     }
   },
+  "enableIPV4": true,
   "enableIPv6": true
 }

@@ -121,3 +121,56 @@ func TestSeparateIPsFailure(t *testing.T) {
 		assert.Error(t, err)
 	}
 }
+
+func TestIsValidPortWithValidPort(t *testing.T) {
+	ports := []string{"1337", "311"}
+	for _, port := range ports {
+		result := isValidPort(port)
+		assert.NoError(t, result)
+	}
+}
+
+func TestIsValidPortWithInvalidPort(t *testing.T) {
+	type Port struct {
+		port           string
+		expectedResult string
+	}
+
+	ports := []Port{
+		{port: "a", expectedResult: "invalid port [a] specified"},
+		{port: "1*ab", expectedResult: "invalid port [1*ab] specified"},
+		{port: " 1", expectedResult: "invalid port [ 1] specified"},
+		{port: "-1", expectedResult: "invalid port [-1] specified"},
+		{port: "1.1", expectedResult: "invalid port [1.1] specified"},
+	}
+	for _, port := range ports {
+		result := isValidPort(port.port)
+		assert.Equal(t, port.expectedResult, result.Error())
+	}
+
+}
+
+func TestIsValidIPAddressOrCIDR(t *testing.T) {
+	type IPAddr struct {
+		ip            string
+		expectedProto string
+		expectedValid bool
+	}
+	ips := []IPAddr{
+		{ip: "216.3.128.12", expectedProto: ipv4Proto, expectedValid: true},
+		{ip: "2001:0db8:85a3:0000:0000:8a2e:0370:7334", expectedProto: ipv6Proto, expectedValid: true},
+		{ip: "2001:0db8::0000:0000:8a2e:0370:7334", expectedProto: ipv6Proto, expectedValid: true},
+		{ip: "216.3.128.12/24", expectedProto: ipv4Proto, expectedValid: true},
+		{ip: "2001:0db8:85a3:0000:0000:8a2e:0370:7334/32", expectedProto: ipv6Proto, expectedValid: true},
+		{ip: "a", expectedProto: "", expectedValid: false},
+		{ip: "1*ab", expectedProto: "", expectedValid: false},
+		{ip: "123.222.333.444/24", expectedProto: "", expectedValid: false},
+		{ip: "123.222..444", expectedProto: "", expectedValid: false},
+		{ip: "123.222/333.444", expectedProto: "", expectedValid: false},
+	}
+	for _, ip := range ips {
+		proto, valid := isValidIPAddressOrCIDR(ip.ip)
+		assert.Equal(t, ip.expectedProto, proto)
+		assert.Equal(t, ip.expectedValid, valid)
+	}
+}

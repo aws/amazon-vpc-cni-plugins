@@ -11,23 +11,23 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build e2e_test, aws_appmesh
+// +build e2e_test aws_appmesh
 
 package e2e
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh/config"
-	testutils "github.com/aws/amazon-vpc-cni-plugins/plugins/utils/test"
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types/current"
-
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -61,12 +61,7 @@ var (
 
 // TestValid tests when network configuration is valid.
 func TestValid(t *testing.T) {
-	// Ensure that the plugin exists.
-	var err error
-	pluginPath, err = invoke.FindInPath("aws-appmesh", []string{os.Getenv("CNI_PATH")})
-	require.NoError(t, err, "Unable to find aws-appmesh plugin in path")
-
-	testutils.SetupPluginEnvironment(t, "aws-appmesh")
+	initTest(t)
 
 	for _, meta := range []testMeta{
 		{
@@ -84,12 +79,7 @@ func TestValid(t *testing.T) {
 
 // TestInvalid tests when network configuration is invalid.
 func TestInvalid(t *testing.T) {
-	// Ensure that the plugin exists.
-	var err error
-	pluginPath, err = invoke.FindInPath("aws-appmesh", []string{os.Getenv("CNI_PATH")})
-	require.NoError(t, err, "Unable to find aws-appmesh plugin in path")
-
-	testutils.SetupPluginEnvironment(t, "aws-appmesh")
+	initTest(t)
 	for _, meta := range []testMeta{
 		{
 			name:     "invalid_without_app_ports",
@@ -108,6 +98,33 @@ func TestInvalid(t *testing.T) {
 			testInvalid(t, meta)
 		})
 	}
+}
+
+// initTest sets up the environment for cni executable.
+func initTest(t *testing.T) {
+	// Ensure that the eni plugin exists.
+	var err error
+
+	pluginPath, err = invoke.FindInPath("aws-appmesh", []string{os.Getenv("CNI_PATH")})
+	require.NoError(t, err, "Unable to find aws-appmesh plugin in path")
+
+	// Create a directory for storing test logs.
+	testLogDir, err := ioutil.TempDir("", "aws-appmesh-cni-e2eTests-test-")
+	require.NoError(t, err, "Unable to create directory for storing test logs")
+
+	// Configure the env var to use the test logs directory.
+	os.Setenv("VPC_CNI_LOG_FILE", fmt.Sprintf("%s/aws-appmesh.log", testLogDir))
+	t.Logf("Using %s for test logs", testLogDir)
+	defer os.Unsetenv("VPC_CNI_LOG_FILE")
+
+	// Handle deletion of test logs at the end of the test execution if specified.
+	ok, err := strconv.ParseBool(getEnvOrDefault("ECS_PRESERVE_E2E_TEST_LOGS", "false"))
+	assert.NoError(t, err, "Unable to parse ECS_PRESERVE_E2E_TEST_LOGS env var")
+	defer func(preserve bool) {
+		if !t.Failed() && !preserve {
+			os.RemoveAll(testLogDir)
+		}
+	}(ok)
 }
 
 // testInvalid verifies that cni ADD command returns error.
@@ -327,4 +344,15 @@ func contains(slices []string, ele string) bool {
 		}
 	}
 	return false
+}
+
+// getEnvOrDefault gets the value of an env var. It returns the fallback value
+// if the env var is not set.
+func getEnvOrDefault(name string, fallback string) string {
+	val := os.Getenv(name)
+	if val == "" {
+		return fallback
+	}
+
+	return val
 }

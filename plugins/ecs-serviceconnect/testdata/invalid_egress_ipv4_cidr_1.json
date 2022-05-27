@@ -17,7 +17,8 @@
     "listenerName": "outbound_listener",
     "listenerPort": 30002,
     "vip": {
-      "ipv4Cidr": ""
+      "ipv4Cidr": "abc"
     }
-  }
+  },
+  "enableIPV4": true
 }
