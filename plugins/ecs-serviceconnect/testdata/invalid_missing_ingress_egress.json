@@ -1,0 +1,4 @@
+{
+  "type": "ecs-serviceconnect",
+  "cniVersion": "0.3.0"
+}
