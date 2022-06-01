@@ -1,0 +1,15 @@
+{
+  "type": "ecs-serviceconnect",
+  "cniVersion": "0.3.0",
+  "ingressConfig": [
+    {
+      "listenerName": "inbound_abc",
+      "listenerPort": 30000
+    },
+    {
+      "listenerName": "inbound_bcd",
+      "listenerPort": 30001
+    }
+  ],
+  "enableIPV4": true
+}

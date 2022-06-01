@@ -1,0 +1,18 @@
+{
+  "type": "ecs-serviceconnect",
+  "cniVersion": "0.3.0",
+  "ingressConfig": [
+    {
+      "interceptPort": 8080,
+      "listenerName": "inbound_abc"
+    }
+  ],
+  "egressConfig": {
+    "listenerName": "outbound_listener",
+    "listenerPort": 30002,
+    "vip": {
+      "ipv4Cidr": "127.255.0.0/16"
+    }
+  },
+  "enableIPV4": true
+}
