@@ -21,6 +21,8 @@ import (
 
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
+	cniTypes "github.com/containernetworking/cni/pkg/types"
+	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/current"
 	"github.com/coreos/go-iptables/iptables"
 )
 
@@ -58,8 +60,15 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		}
 		return nil
 	})
-	// TODO: Do we need to return CNI result?
-	return err
+	result := &cniTypesCurrent.Result{
+		Interfaces: []*cniTypesCurrent.Interface{
+			{
+				Name:    args.IfName,
+				Sandbox: args.Netns,
+			},
+		},
+	}
+	return cniTypes.PrintResult(result, netConfig.CNIVersion)
 }
 
 // Del is the internal implementation of CNI DEL command.

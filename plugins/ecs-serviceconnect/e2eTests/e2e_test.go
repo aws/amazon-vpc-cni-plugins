@@ -28,6 +28,8 @@ import (
 
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
+	"github.com/containernetworking/cni/pkg/types"
+	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -147,11 +149,13 @@ func testValid(t *testing.T, filename string) {
 
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
-	err = invoke.ExecPluginWithoutResult(
+	res, err := invoke.ExecPluginWithResult(
 		pluginPath,
 		netConfData,
 		execInvokeArgs)
 	require.NoError(t, err, "Unable to execute ADD command for ecs-serviceconnect CNI plugin")
+
+	validateResults(t, res)
 
 	targetNS.Run(func() error {
 		// Validate IP rules successfully added.
@@ -172,6 +176,15 @@ func testValid(t *testing.T, filename string) {
 		validateIPRulesDeleted(t, netConf)
 		return nil
 	})
+}
+
+func validateResults(t *testing.T, result types.Result) {
+	// Test that the plugin passed previous CNI result unmodified.
+	res, err := result.GetAsVersion("0.3.1")
+	assert.NoError(t, err, "Unable to parse result")
+	r := res.(*current.Result)
+	assert.Equal(t, 0, len(r.IPs))
+	assert.Equal(t, 0, len(r.Routes))
 }
 
 // validateIPRulesAdded validates IP rules created in the target network namespace.
