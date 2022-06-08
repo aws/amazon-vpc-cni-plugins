@@ -103,10 +103,10 @@ func New(args *cniSkel.CmdArgs, isAdd bool) (*NetConfig, error) {
 	// Parse the optional branch IP address.
 	if config.BranchIPAddress != "" {
 		ipAddr, err := vpc.GetIPAddressFromString(config.BranchIPAddress)
-		netConfig.BranchIPAddress = *ipAddr
 		if err != nil {
 			return nil, fmt.Errorf("invalid branchIPAddress %s", config.BranchIPAddress)
 		}
+		netConfig.BranchIPAddress = *ipAddr
 	}
 
 	// Parse the optional TAP interface UID and GID.
