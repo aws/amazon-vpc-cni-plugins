@@ -162,10 +162,20 @@ $(BUILD_DIR)/netnsexec: $(NETNSEXEC_TOOL_SOURCE_FILES) $(COMMON_SOURCE_FILES)
 		github.com/aws/amazon-vpc-cni-plugins/tools/netnsexec
 	@echo "Built netnsexec tool."
 
+# List of go packages to be tested by test targets.
+PACKAGES_TO_TEST = \
+		./capabilities/... \
+		./cni/... \
+		./logger/... \
+		./network/... \
+		./version/... \
+		./plugins/... \
+		./tools/...
+
 # Run all unit tests.
 .PHONY: unit-test
-unit-test: $(ALL_SOURCE_FILES)
-	go test -v -cover -race -timeout 10s ./...
+unit-test:
+	go test -v -cover -race -timeout 10s $(PACKAGES_TO_TEST)
 
 # Run aws-appmesh unit tests.
 .PHONY: appmesh-unit-test
@@ -179,13 +189,13 @@ ecs-serviceconnect-unit-test:
 
 # Run all integration tests.
 .PHONY: integration-test
-integration-test: $(ALL_SOURCE_FILES)
-	go test -v -tags integration_test -race -timeout 10s ./...
+integration-test:
+	go test -v -tags integration_test -race -timeout 10s $(PACKAGES_TO_TEST)
 
 # Run all e2e tests.
 .PHONY: e2e-test
 e2e-test:  $(ALL_SOURCE_FILES) all-binaries
-	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 120s ./...
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 120s $(PACKAGES_TO_TEST)
 
 .PHONY: appmesh-e2e-test
 appmesh-e2e-test:  $(ALL_SOURCE_FILES) aws-appmesh
