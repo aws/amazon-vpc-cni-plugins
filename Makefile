@@ -61,7 +61,7 @@ vpc-tunnel: $(BUILD_DIR)/vpc-tunnel
 aws-appmesh: $(BUILD_DIR)/aws-appmesh
 ecs-serviceconnect: $(BUILD_DIR)/ecs-serviceconnect
 netnsexec: $(BUILD_DIR)/netnsexec
-all-plugins: vpc-eni vpc-shared-eni vpc-branch-eni vpc-branch-pat-eni vpc-tunnel aws-appmesh ecs-serviceconnect
+all-plugins: vpc-eni vpc-shared-eni vpc-branch-eni vpc-tunnel aws-appmesh ecs-serviceconnect
 all-tools: netnsexec
 all-binaries: all-plugins all-tools
 build: all-binaries unit-test
