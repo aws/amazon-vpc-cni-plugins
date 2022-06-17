@@ -22,6 +22,7 @@ import (
 // https://github.com/containernetworking/cni/blob/master/SPEC.md
 type API interface {
 	Add(args *cniSkel.CmdArgs) error
+	Check(args *cniSkel.CmdArgs) error
 	Del(args *cniSkel.CmdArgs) error
 	GetVersion() cniVersion.PluginInfo
 }

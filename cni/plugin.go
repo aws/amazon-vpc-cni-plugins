@@ -119,7 +119,12 @@ func (plugin *Plugin) Run() *cniTypes.Error {
 
 	// Execute CNI command handlers.
 	cniErr := cniSkel.PluginMainWithError(
-		plugin.Commands.Add, plugin.Commands.Del, plugin.Commands.GetVersion())
+		plugin.Commands.Add,
+		plugin.Commands.Check,
+		plugin.Commands.Del,
+		plugin.Commands.GetVersion(),
+		plugin.Name)
+
 	if cniErr != nil {
 		log.Errorf("CNI command failed: %+v", cniErr)
 	}
@@ -129,6 +134,11 @@ func (plugin *Plugin) Run() *cniTypes.Error {
 
 // Add is an empty CNI ADD command handler to ensure all CNI plugins implement CNIAPI.
 func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
+	return nil
+}
+
+// Check is an empty CNI CHECK command handler to ensure all CNI plugins implement CNIAPI.
+func (plugin *Plugin) Check(args *cniSkel.CmdArgs) error {
 	return nil
 }
 
