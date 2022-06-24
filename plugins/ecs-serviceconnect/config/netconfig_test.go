@@ -27,12 +27,14 @@ import (
 )
 
 type testConfig struct {
-	filePath      string
-	ingressMap    map[int]int
-	egressPort    int
-	egressIpv4Vip string
-	egressIpv6Vip string
-	protos        []iptables.Protocol
+	filePath           string
+	ingressMap         map[int]int
+	egressPort         int
+	egressRedirectIP   string
+	egressRedirectMode RedirectMode
+	egressIpv4Vip      string
+	egressIpv6Vip      string
+	protos             []iptables.Protocol
 }
 
 // loadTestData loads test cases in json form.
@@ -111,11 +113,16 @@ func TestValidConfigs(t *testing.T) {
 func TestInvalidConfigs(t *testing.T) {
 	// Test all invalid configs.
 	for _, config := range []string{
-		"invalid_egress_ipv4_cidr_1", "invalid_egress_ipv4_cidr_2", "invalid_egress_ipv6_cidr_1",
-		"invalid_egress_ipv6_cidr_2", "invalid_egress_listener_port", "invalid_empty_egress",
-		"invalid_empty_egress_vip", "invalid_ingress_intercept_port", "invalid_ingress_listener_port",
-		"invalid_missing_egress_listener_port", "invalid_missing_egress_vip", "invalid_missing_ingress_egress",
-		"invalid_missing_ingress_listener_port", "invalid_missing_ip", "invalid_v6_missing_egress_vip",
+		"invalid_egress_ipv4_cidr_1", "invalid_egress_ipv4_cidr_2",
+		"invalid_egress_ipv6_cidr_1", "invalid_egress_ipv6_cidr_2",
+		"invalid_egress_listener_port", "invalid_egress_redirect_ip_1",
+		"invalid_egress_redirect_ip_2", "invalid_egress_redirect_ip_3",
+		"invalid_empty_egress", "invalid_empty_egress_vip",
+		"invalid_ingress_intercept_port", "invalid_ingress_listener_port",
+		"invalid_missing_egress_listener_port", "invalid_missing_egress_vip",
+		"invalid_missing_ingress_egress", "invalid_missing_ingress_listener_port",
+		"invalid_missing_ip", "invalid_missing_redirect_mode", "invalid_redirect_mode",
+		"invalid_v6_missing_egress_vip",
 	} {
 		args := &skel.CmdArgs{
 			StdinData: []byte(loadTestData(t, config)),

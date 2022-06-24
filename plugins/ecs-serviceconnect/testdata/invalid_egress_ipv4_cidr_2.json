@@ -18,7 +18,8 @@
     "listenerPort": 30002,
     "vip": {
       "ipv4Cidr": "2002::1234:abcd:ffff:c0a8:101/64"
-    }
+    },
+    "redirectMode": "nat"
   },
   "enableIPV4": true
 }

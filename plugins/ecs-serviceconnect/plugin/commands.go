@@ -14,8 +14,6 @@
 package plugin
 
 import (
-	"strconv"
-
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/ecs-serviceconnect/config"
 
@@ -24,12 +22,6 @@ import (
 	cniTypes "github.com/containernetworking/cni/pkg/types"
 	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/current"
 	"github.com/coreos/go-iptables/iptables"
-)
-
-const (
-	// Names of iptables chains created for ECS Service Connect rules.
-	ingressChain = "ECS_SERVICE_CONNECT_INGRESS"
-	egressChain  = "ECS_SERVICE_CONNECT_EGRESS"
 )
 
 // Add is the internal implementation of CNI ADD command.
@@ -53,7 +45,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	// Add IP rules in the target network namespace.
 	err = ns.Run(func() error {
 		for _, proto := range netConfig.IPProtocols {
-			if err = plugin.setupIptablesRules(proto, netConfig); err != nil {
+			if err = plugin.setupNetfilterRules(proto, netConfig); err != nil {
 				log.Errorf("Failed to set up iptables rules: %v.", err)
 				return err
 			}
@@ -94,8 +86,8 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	// Delete IP rules in the target network namespace.
 	err = ns.Run(func() error {
 		for _, proto := range netConfig.IPProtocols {
-			if err = plugin.deleteIptablesRules(proto, netConfig); err != nil {
-				log.Errorf("Failed to delete ip rules: %v.", err)
+			if err = plugin.deleteNetfilterRules(proto, netConfig); err != nil {
+				log.Errorf("Failed to delete netfilter rules: %v.", err)
 				return err
 			}
 		}
@@ -104,8 +96,9 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	return err
 }
 
-// setupIptablesRules sets iptables/ip6tables rules in container network namespace.
-func (plugin *Plugin) setupIptablesRules(proto iptables.Protocol, config *config.NetConfig) error {
+// setupNetfilterRules sets up rules in container network namespace.
+func (plugin *Plugin) setupNetfilterRules(proto iptables.Protocol,
+	config *config.NetConfig) error {
 	// Create a new iptables object.
 	iptable, err := iptables.NewWithProtocol(proto)
 	if err != nil {
@@ -119,54 +112,8 @@ func (plugin *Plugin) setupIptablesRules(proto iptables.Protocol, config *config
 	return plugin.setupEgressRules(iptable, proto, config)
 }
 
-// setupIngressRules sets Ingress port redirection rules in the network namespace.
-func (plugin *Plugin) setupIngressRules(
-	iptable *iptables.IPTables,
-	config *config.NetConfig) error {
-	// Skip setting rules when there is no redirection.
-	if len(config.IngressListenerToInterceptPortMap) == 0 {
-		return nil
-	}
-
-	//TODO: Handle bridge mode.
-
-	// Redirect non-local traffic to the redirection port.
-	return plugin.redirectNonLocalTraffic(iptable, ingressChain, config.IngressListenerToInterceptPortMap)
-}
-
-// setupEgressRules sets Egress port redirection rules in the network namespace.
-func (plugin *Plugin) setupEgressRules(
-	iptable *iptables.IPTables,
-	proto iptables.Protocol,
-	config *config.NetConfig) error {
-	// Skip setting rules when there is no egress listener port.
-	if config.EgressPort == 0 {
-		return nil
-	}
-
-	//TODO: Handle Bridge mode.
-
-	// Redirect traffic in the CIDR block to the egress port.
-	return plugin.redirectCIDRTraffic(iptable, plugin.getCidr(proto, config), strconv.Itoa(config.EgressPort))
-}
-
-// redirectCIDRTraffic sets rules to redirect traffic in the CIDR block to the egress port.
-func (plugin *Plugin) redirectCIDRTraffic(
-	iptable *iptables.IPTables,
-	cidr string,
-	redirectPort string) error {
-	err := iptable.Append("nat", "OUTPUT", "-p", "tcp", "-d", cidr,
-		"-j", "REDIRECT", "--to-port", redirectPort)
-
-	if err != nil {
-		log.Errorf("Append rule to redirect traffic of CIDR failed: %v", err)
-	}
-
-	return err
-}
-
-// deleteIptablesRules removes iptables/ip6tables rules in container network namespace.
-func (plugin *Plugin) deleteIptablesRules(
+// deleteNetfilterRules removes all the netfilter rules added in container network namespace.
+func (plugin *Plugin) deleteNetfilterRules(
 	proto iptables.Protocol,
 	config *config.NetConfig) error {
 	/// Create a new iptables session.
@@ -184,122 +131,15 @@ func (plugin *Plugin) deleteIptablesRules(
 	return plugin.deleteEgressRules(iptable, proto, config)
 }
 
-// deleteIngressRules deletes the iptable rules for ingress traffic.
-func (plugin *Plugin) deleteIngressRules(
-	iptable *iptables.IPTables,
-	config *config.NetConfig) error {
-	// Skip deleting rules when there is no redirection.
-	if len(config.IngressListenerToInterceptPortMap) == 0 {
-		return nil
-	}
-	// Delete ingress rule from iptables.
-	if err := plugin.deleteNonLocalRedirectionRules(iptable, ingressChain); err != nil {
-		log.Errorf("Delete the rule in PREROUTING chain failed: %v", err)
-		return err
-	}
-	// Remove the added chain.
-	return plugin.removeChain(iptable, ingressChain)
-}
-
-// deleteEgressRules deletes the iptable rules for egress traffic.
-func (plugin *Plugin) deleteEgressRules(
-	iptable *iptables.IPTables,
-	proto iptables.Protocol,
-	config *config.NetConfig) error {
-	// Skip deleting rules when there is no egress listener port
-	if config.EgressPort == 0 {
-		return nil
-	}
-	// Delete the CIDR redirection rules.
-	return plugin.deleteCIDRRedirectionRule(iptable, plugin.getCidr(proto, config), strconv.Itoa(config.EgressPort))
-}
-
-// getCidr returns the CIDR for the given protocol.
-func (plugin *Plugin) getCidr(
-	proto iptables.Protocol,
-	config *config.NetConfig) string {
-	var cidr string
-	if proto == iptables.ProtocolIPv4 {
-		cidr = config.EgressIPv4CIDR
-	} else {
-		cidr = config.EgressIPv6CIDR
-	}
-	return cidr
-}
-
-// deleteCIDRRedirectionRule deletes the CIDR redirection rule set.
-func (plugin *Plugin) deleteCIDRRedirectionRule(
-	iptable *iptables.IPTables,
-	cidr string,
-	redirectPort string) error {
-	err := iptable.Delete("nat", "OUTPUT", "-p", "tcp", "-d", cidr,
-		"-j", "REDIRECT", "--to-port", redirectPort)
-	// TODO: Remove other rules.
-	if err != nil {
-		log.Errorf("Delete rule to redirect traffic of CIDR failed: %v", err)
-	}
-	return err
-}
-
-// redirectNonLocalTraffic adds iptable rules to the given chain to route non-local traffic
-// coming in from the given listener port to intercept ports and adds the chain
-// to the NAT table at PREROUTING stage.
-func (plugin *Plugin) redirectNonLocalTraffic(
-	iptable *iptables.IPTables,
-	chain string,
-	listenerPortToInterceptPort map[int]int) error {
-
-	// Create a new chain.
-	err := iptable.NewChain("nat", chain)
-	if err != nil {
-		log.Errorf("Create new IP table chain[%v] failed: %v", chain, err)
-		return err
-	}
-
-	// Route everything arriving at intercept ports to listener port.
-	for listenerPort, interceptPort := range listenerPortToInterceptPort {
-		err := iptable.Append("nat", chain, "-p", "tcp", "--dport", strconv.Itoa(interceptPort),
-			"-j", "REDIRECT", "--to-port", strconv.Itoa(listenerPort))
-		if err != nil {
-			log.Errorf("Append rule to redirect traffic to Port in chain[%v] failed: %v", chain, err)
-			return err
-		}
-	}
-
-	// Apply the chain to everything non-local.
-	err = iptable.Append("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!", "--src-type",
-		"LOCAL", "-j", chain)
-	if err != nil {
-		log.Errorf("Append rule to jump from PREROUTING to chain[%v] failed: %v", chain, err)
-		return err
-	}
-	return nil
-}
-
-// deleteNonLocalRedirectionRules deletes the non-local traffic to the given chain in NAT table at PREROUTING stage.
-func (plugin *Plugin) deleteNonLocalRedirectionRules(
-	iptable *iptables.IPTables,
-	chain string) error {
-	err := iptable.Delete("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!", "--src-type",
-		"LOCAL", "-j", chain)
-	if err != nil {
-		log.Errorf("Delete rule to redirect Non local traffic to chain[%v] failed: %v", chain, err)
-		return err
-	}
-	return nil
-}
-
 // removeChain flushes and deletes the given chain.
-func (plugin *Plugin) removeChain(
-	iptable *iptables.IPTables,
-	chain string) error {
+func (plugin *Plugin) removeChain(iptable *iptables.IPTables, table string, chain string) error {
 	// Flush and delete the chain.
-	err := iptable.ClearChain("nat", chain)
+	err := iptable.ClearChain(table, chain)
 	if err != nil {
 		log.Errorf("Failed to flush rules in chain[%v]: %v", chain, err)
 		return err
 	}
-	err = iptable.DeleteChain("nat", chain)
+	err = iptable.DeleteChain(table, chain)
 	if err != nil {
 		log.Errorf("Failed to delete chain[%v]: %v", chain, err)
 		return err

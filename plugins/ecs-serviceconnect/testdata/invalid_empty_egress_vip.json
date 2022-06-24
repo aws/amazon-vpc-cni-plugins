@@ -17,7 +17,8 @@
     "listenerName": "outbound_listener",
     "listenerPort": 30002,
     "vip": {
-    }
+    },
+    "redirectMode": "nat"
   },
   "enableIPV4": true
 }

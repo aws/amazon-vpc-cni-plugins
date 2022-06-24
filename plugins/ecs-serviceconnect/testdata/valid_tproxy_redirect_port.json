@@ -3,12 +3,10 @@
   "cniVersion": "0.3.0",
   "ingressConfig": [
     {
-      "interceptPort": -1,
       "listenerName": "inbound_abc",
       "listenerPort": 30000
     },
     {
-      "interceptPort": 8090,
       "listenerName": "inbound_bcd",
       "listenerPort": 30001
     }
@@ -17,9 +15,11 @@
     "listenerName": "outbound_listener",
     "listenerPort": 30002,
     "vip": {
-      "ipv4Cidr": "127.255.0.0/16"
+      "ipv4Cidr": "127.255.0.0/16",
+      "ipv6Cidr": "2600:f0f0::/96"
     },
-    "redirectMode": "nat"
+    "redirectMode": "tproxy"
   },
-  "enableIPV4": true
+  "enableIPV4": true,
+  "enableIPv6": true
 }

@@ -18,7 +18,8 @@
     "listenerPort": -1,
     "vip": {
       "ipv4Cidr": "127.255.0.0/16"
-    }
+    },
+    "redirectMode": "nat"
   },
   "enableIPV4": true
 }
