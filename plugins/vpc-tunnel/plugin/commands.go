@@ -194,6 +194,9 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 
 			return nil
 		})
+		if err != nil {
+			log.Errorf("Failed to set netns %s, ignoring: %v.", args.Netns, err)
+		}
 	} else {
 		// Log and ignore the failure. DEL can be called multiple times and thus must be idempotent.
 		log.Errorf("Failed to find netns %s, ignoring: %v.", args.Netns, err)
