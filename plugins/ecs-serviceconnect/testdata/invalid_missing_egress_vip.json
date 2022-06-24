@@ -15,7 +15,8 @@
   ],
   "egressConfig": {
     "listenerName": "outbound_listener",
-    "listenerPort": 30002
+    "listenerPort": 30002,
+    "redirectMode": "nat"
   },
   "enableIPV4": true
 }
