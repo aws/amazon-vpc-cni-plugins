@@ -6,7 +6,7 @@ require (
 	github.com/Microsoft/go-winio v0.4.12 // indirect
 	github.com/Microsoft/hcsshim v0.7.12
 	github.com/cihub/seelog v0.0.0-20151216151435-d2c6e5aa9fbf
-	github.com/containernetworking/cni v0.6.0
+	github.com/containernetworking/cni v0.8.1
 	github.com/coreos/go-iptables v0.4.0
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/gogo/protobuf v1.2.1 // indirect
