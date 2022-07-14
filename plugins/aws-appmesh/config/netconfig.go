@@ -25,7 +25,6 @@ import (
 	cniTypes "github.com/containernetworking/cni/pkg/types"
 	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/current"
 	cniVersion "github.com/containernetworking/cni/pkg/version"
-	"github.com/pkg/errors"
 )
 
 // NetConfig defines the network configuration for the aws-appmesh cni plugin.
@@ -178,7 +177,7 @@ func separateIPs(ignoredIPs []string) (string, string, error) {
 		trimIP := strings.TrimSpace(ip)
 		proto, valid := isValidIPAddressOrCIDR(trimIP)
 		if !valid {
-			return "", "", errors.Errorf("invalid IP or CIDR block [%s] specified in egressIgnoredIPs", trimIP)
+			return "", "", fmt.Errorf("invalid IP or CIDR block [%s] specified in egressIgnoredIPs", trimIP)
 		}
 
 		if proto == ipv4Proto {
@@ -202,7 +201,7 @@ func isValidPort(port string) error {
 		return nil
 	}
 
-	return errors.Errorf("invalid port [%s] specified", port)
+	return fmt.Errorf("invalid port [%s] specified", port)
 }
 
 // isValidIPAddressOrCIDR checks whether the input is a valid IP addresses/CIDR block and checks the IP protocol.

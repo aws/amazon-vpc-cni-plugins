@@ -46,9 +46,6 @@ github.com/konsorten/go-windows-terminal-sequences
 ## explicit
 # github.com/onsi/gomega v1.5.0
 ## explicit
-# github.com/pkg/errors v0.8.1
-## explicit
-github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
 github.com/pmezard/go-difflib/difflib

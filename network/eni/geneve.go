@@ -11,6 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+//go:build linux
 // +build linux
 
 package eni
@@ -24,7 +25,6 @@ import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 
 	log "github.com/cihub/seelog"
-	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 )
 
@@ -43,17 +43,17 @@ type Geneve struct {
 // NewGeneve creates a new Geneve object.
 func NewGeneve(
 	linkName string,
-	destinationIP net.IP,
+	destinationIPAddress net.IP,
 	destinationPort uint16,
 	vni string,
 	primary bool) (*Geneve, error) {
 	if linkName == "" {
-		return nil, fmt.Errorf("Link name cannot be empty")
+		return nil, fmt.Errorf("link name cannot be empty")
 	}
 	if vni == "" {
 		return nil, fmt.Errorf("VNI cannot be empty")
 	}
-	if destinationIP == nil {
+	if destinationIPAddress == nil {
 		return nil, fmt.Errorf("tunnel interface IP cannot be empty")
 	}
 	if destinationPort == 0 {
@@ -62,14 +62,14 @@ func NewGeneve(
 
 	vniID, err := strconv.ParseInt(vni, 16, 32)
 	if err != nil {
-		return nil, errors.Wrapf(err, "unable to parse VNI")
+		return nil, fmt.Errorf("failed to parse VNI %s: %w", vni, err)
 	}
 
 	geneve := &Geneve{
 		ENI: ENI{
 			linkName: linkName,
 		},
-		DestinationIPAddress: destinationIP,
+		DestinationIPAddress: destinationIPAddress,
 		DestinationPort:      destinationPort,
 		VNI:                  uint32(vniID),
 		Primary:              primary,

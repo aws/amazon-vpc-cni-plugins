@@ -14,10 +14,9 @@
 package vpc
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // ValidatePort checks whether the port only has digits and is within valid port range.
@@ -25,7 +24,7 @@ func ValidatePort(p string) error {
 	port := strings.TrimSpace(p)
 
 	if t, err := strconv.ParseUint(port, 10, 16); err != nil || t == 0 {
-		return errors.Errorf("invalid port [%s] specified", p)
+		return fmt.Errorf("invalid port %s specified", p)
 	}
 	return nil
 }
@@ -35,5 +34,5 @@ func ValidatePortRange(port int) error {
 	if port > 0 && port <= 65535 {
 		return nil
 	}
-	return errors.Errorf("invalid port [%d] specified", port)
+	return fmt.Errorf("invalid port %d specified", port)
 }
