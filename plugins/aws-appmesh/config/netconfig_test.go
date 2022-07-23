@@ -11,6 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+//go:build !integration_test && !e2e_test
 // +build !integration_test,!e2e_test
 
 package config
@@ -28,38 +29,38 @@ type config struct {
 
 var (
 	validConfigs = []config{
-		config{
+		{
 			netConfig: `{"ignoredUID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "appPorts":["1223","2334"], "egressIgnoredPorts":["80","81"], "egressIgnoredIPs":["216.3.128.12","216.3.128.12/24","2001:0db8:85a3:0000:0000:8a2e:0370:7334"]}`,
 		},
-		config{
+		{
 			netConfig: `{"ignoredUID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "appPorts":["1223","2334"], "egressIgnoredPorts":["80"], "egressIgnoredIPs":["216.3.128.12/24","2001:0db8:85a3:0000:0000:8a2e:0370:7334/32"]}`,
 		},
-		config{
+		{
 			netConfig: `{"ignoredUID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "appPorts":["1223","2334"], "egressIgnoredIPs":["216.3.128.12"]}`,
 		},
-		config{
+		{
 			netConfig: `{"ignoredGID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "appPorts":["1223"]}`,
 		},
-		config{
+		{
 			// no ingress traffic, e.g. batch job.
 			netConfig: `{"ignoredGID":"1337", "proxyEgressPort":"8000"}`,
 		},
 	}
 
 	invalidConfigs = []config{
-		config{
+		{
 			netConfig: `{"ignoredUID":"1337"}`,
 		},
-		config{
+		{
 			netConfig: `{"ignoredUID":"1337", "proxyIngressPort":"ab80", "proxyEgressPort":"8000", "appPorts":["1223","2334"]}`,
 		},
-		config{
+		{
 			netConfig: `{"ignoredUID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "appPorts":["1223","2334"], "egressIgnoredPorts":["80"], "egressIgnoredIPs":["12a.22b.128.12","2001:0db8:85a3:0000:0000:8a2e:0370:7334"]}`,
 		},
-		config{
+		{
 			netConfig: `{"ignoredGID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000"}`,
 		},
-		config{
+		{
 			netConfig: `{"ignoredGID":"1337", "proxyEgressPort":"8000", "appPorts":["1223"]}`,
 		},
 	}

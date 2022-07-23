@@ -446,7 +446,7 @@ func (plugin *Plugin) createMACVTAPLink(linkName string, parentIndex int) error 
 	la.Name = linkName
 	la.ParentIndex = parentIndex
 	macvtapLink := &netlink.Macvtap{
-		netlink.Macvlan{
+		Macvlan: netlink.Macvlan{
 			LinkAttrs: la,
 			Mode:      netlink.MACVLAN_MODE_PASSTHRU,
 		},

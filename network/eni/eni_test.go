@@ -26,23 +26,23 @@ func TestGetInterfaceByMacAddress(t *testing.T) {
 
 	interfaces := []net.Interface{
 		{
-			Index: 1,
-			Name: "eth1.1",
+			Index:        1,
+			Name:         "eth1.1",
 			HardwareAddr: mac1,
 		},
 		{
-			Index: 2,
-			Name: "eth1",
+			Index:        2,
+			Name:         "eth1",
 			HardwareAddr: mac1,
 		},
 		{
-			Index: 3,
-			Name: "eth1.1.1",
+			Index:        3,
+			Name:         "eth1.1.1",
 			HardwareAddr: mac1,
 		},
 		{
-			Index: 4,
-			Name: "eth",
+			Index:        4,
+			Name:         "eth",
 			HardwareAddr: mac2,
 		},
 	}
