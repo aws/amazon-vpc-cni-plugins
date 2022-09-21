@@ -36,7 +36,7 @@ type NetConfig struct {
 	ProxyIngressPort   string
 	ProxyEgressPort    string
 	AppPorts           string
-	EgressIgnoredPorts string
+	EgressIgnoredPorts []string
 	EgressIgnoredIPv4s string
 	EgressIgnoredIPv6s string
 	EnableIPv6         bool
@@ -92,7 +92,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		AppPorts:           strings.Join(config.AppPorts, splitter),
 		EgressIgnoredIPv4s: ipv4s,
 		EgressIgnoredIPv6s: ipv6s,
-		EgressIgnoredPorts: strings.Join(config.EgressIgnoredPorts, splitter),
+		EgressIgnoredPorts: config.EgressIgnoredPorts,
 		EnableIPv6:         config.EnableIPv6,
 	}
 

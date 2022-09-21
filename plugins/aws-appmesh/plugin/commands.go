@@ -173,11 +173,12 @@ func (plugin *Plugin) setupEgressRules(
 	}
 
 	if config.EgressIgnoredPorts != "" {
-		err = iptable.Append("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports",
-			config.EgressIgnoredPorts, "-j", "RETURN")
-		if err != nil {
-			log.Errorf("Append rule for egressIgnoredPorts failed: %v", err)
-			return err
+		for _, port := range config.EgressIgnoredPorts {
+			err = iptable.Append("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports", port, "-j", "RETURN")
+			if err != nil {
+				log.Errorf("Append rule for egressIgnoredPorts failed: %v", err)
+				return err
+			}
 		}
 	}
 
