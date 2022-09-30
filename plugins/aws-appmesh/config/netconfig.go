@@ -35,7 +35,7 @@ type NetConfig struct {
 	IgnoredGID         string
 	ProxyIngressPort   string
 	ProxyEgressPort    string
-	AppPorts           string
+	AppPorts           []string
 	EgressIgnoredPorts []string
 	EgressIgnoredIPv4s string
 	EgressIgnoredIPv6s string
@@ -58,7 +58,7 @@ type netConfigJSON struct {
 }
 
 const (
-	splitter  = ","
+	Splitter  = ","
 	ipv4Proto = "IPv4"
 	ipv6Proto = "IPv6"
 )
@@ -89,7 +89,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 		IgnoredGID:         config.IgnoredGID,
 		ProxyIngressPort:   config.ProxyIngressPort,
 		ProxyEgressPort:    config.ProxyEgressPort,
-		AppPorts:           strings.Join(config.AppPorts, splitter),
+		AppPorts:           config.AppPorts,
 		EgressIgnoredIPv4s: ipv4s,
 		EgressIgnoredIPv6s: ipv6s,
 		EgressIgnoredPorts: config.EgressIgnoredPorts,
@@ -187,7 +187,7 @@ func separateIPs(ignoredIPs []string) (string, string, error) {
 		}
 
 	}
-	return strings.Join(ipv4s, splitter), strings.Join(ipv6s, splitter), nil
+	return strings.Join(ipv4s, Splitter), strings.Join(ipv6s, Splitter), nil
 }
 
 // isValidPort checks whether the port only has digits.

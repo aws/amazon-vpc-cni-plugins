@@ -14,8 +14,11 @@
 package plugin
 
 import (
+	"strings"
+
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh/config"
+	ncfg "github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh/config"
 
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
@@ -172,13 +175,14 @@ func (plugin *Plugin) setupEgressRules(
 		}
 	}
 
-	if config.EgressIgnoredPorts != "" {
-		for _, port := range config.EgressIgnoredPorts {
-			err = iptable.Append("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports", port, "-j", "RETURN")
-			if err != nil {
-				log.Errorf("Append rule for egressIgnoredPorts failed: %v", err)
-				return err
-			}
+	if len(config.EgressIgnoredPorts) > 0 {
+		err = eachNSlice(config.EgressIgnoredPorts, 15, func(ports []string) error {
+			return iptable.Append("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports", strings.Join(ports, ncfg.Splitter), "-j", "RETURN")
+		})
+
+		if err != nil {
+			log.Errorf("Append rule for egressIgnoredPorts failed: %v", err)
+			return err
 		}
 	}
 
@@ -208,6 +212,30 @@ func (plugin *Plugin) setupEgressRules(
 	return nil
 }
 
+func eachNSlice(ss []string, n int, f func([]string) error) error {
+	s := make([]string, n)
+
+	for i, val := range ss {
+		s = append(s, val)
+
+		if (i+1)%n == 0 {
+			if err := f(s); err != nil {
+				return err
+			}
+
+			s = []string{}
+		}
+	}
+
+	if len(s) > 0 {
+		if err := f(s); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // setupIngressRules installs iptable rules to handle ingress traffic.
 func (plugin *Plugin) setupIngressRules(
 	iptable *iptables.IPTables,
@@ -222,8 +250,10 @@ func (plugin *Plugin) setupIngressRules(
 	}
 
 	// Route everything arriving at the application port to proxy.
-	err = iptable.Append("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", config.AppPorts,
-		"-j", "REDIRECT", "--to-port", config.ProxyIngressPort)
+	err = eachNSlice(config.AppPorts, 15, func(ports []string) error {
+		return iptable.Append("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", strings.Join(ports, ncfg.Splitter),
+			"-j", "REDIRECT", "--to-port", config.ProxyIngressPort)
+	})
 	if err != nil {
 		log.Errorf("Append rule to redirect traffic to proxyIngressPort failed: %v", err)
 		return err
