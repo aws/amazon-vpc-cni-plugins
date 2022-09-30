@@ -212,30 +212,6 @@ func (plugin *Plugin) setupEgressRules(
 	return nil
 }
 
-func eachNSlice(ss []string, n int, f func([]string) error) error {
-	s := make([]string, n)
-
-	for i, val := range ss {
-		s = append(s, val)
-
-		if (i+1)%n == 0 {
-			if err := f(s); err != nil {
-				return err
-			}
-
-			s = []string{}
-		}
-	}
-
-	if len(s) > 0 {
-		if err := f(s); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // setupIngressRules installs iptable rules to handle ingress traffic.
 func (plugin *Plugin) setupIngressRules(
 	iptable *iptables.IPTables,
@@ -343,6 +319,30 @@ func (plugin *Plugin) deleteEgressRules(iptable *iptables.IPTables) error {
 	if err != nil {
 		log.Errorf("Failed to delete chain[%v]: %v", egressChain, err)
 		return err
+	}
+
+	return nil
+}
+
+func eachNSlice(ss []string, n int, f func([]string) error) error {
+	s := make([]string, n)
+
+	for i, val := range ss {
+		s = append(s, val)
+
+		if (i+1)%n == 0 {
+			if err := f(s); err != nil {
+				return err
+			}
+
+			s = []string{}
+		}
+	}
+
+	if len(s) > 0 {
+		if err := f(s); err != nil {
+			return err
+		}
 	}
 
 	return nil
