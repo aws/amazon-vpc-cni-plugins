@@ -18,7 +18,6 @@ import (
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh/config"
-	ncfg "github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh/config"
 
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
@@ -30,6 +29,8 @@ const (
 	// Names of iptables chains created for App Mesh rules.
 	ingressChain = "APPMESH_INGRESS"
 	egressChain  = "APPMESH_EGRESS"
+	// Up to 15 ports can be specified when using iptables multiport module
+	multiportLimit = 15
 )
 
 // Add is the internal implementation of CNI ADD command.
@@ -176,8 +177,8 @@ func (plugin *Plugin) setupEgressRules(
 	}
 
 	if len(config.EgressIgnoredPorts) > 0 {
-		err = eachNSlice(config.EgressIgnoredPorts, 15, func(ports []string) error {
-			return iptable.Append("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports", strings.Join(ports, ncfg.Splitter), "-j", "RETURN")
+		err = forEachSlice(config.EgressIgnoredPorts, multiportLimit, func(ports []string) error {
+			return iptable.Append("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports", strings.Join(ports, ","), "-j", "RETURN")
 		})
 
 		if err != nil {
@@ -226,8 +227,8 @@ func (plugin *Plugin) setupIngressRules(
 	}
 
 	// Route everything arriving at the application port to proxy.
-	err = eachNSlice(config.AppPorts, 15, func(ports []string) error {
-		return iptable.Append("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", strings.Join(ports, ncfg.Splitter),
+	err = forEachSlice(config.AppPorts, multiportLimit, func(ports []string) error {
+		return iptable.Append("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", strings.Join(ports, ","),
 			"-j", "REDIRECT", "--to-port", config.ProxyIngressPort)
 	})
 	if err != nil {
@@ -324,13 +325,13 @@ func (plugin *Plugin) deleteEgressRules(iptable *iptables.IPTables) error {
 	return nil
 }
 
-func eachNSlice(ss []string, n int, f func([]string) error) error {
-	s := make([]string, n)
+func forEachSlice(ss []string, size int, f func([]string) error) error {
+	s := make([]string, size)
 
 	for i, val := range ss {
 		s = append(s, val)
 
-		if (i+1)%n == 0 {
+		if (i+1)%size == 0 {
 			if err := f(s); err != nil {
 				return err
 			}

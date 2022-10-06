@@ -58,7 +58,7 @@ type netConfigJSON struct {
 }
 
 const (
-	Splitter  = ","
+	splitter  = ","
 	ipv4Proto = "IPv4"
 	ipv6Proto = "IPv6"
 )
@@ -187,7 +187,7 @@ func separateIPs(ignoredIPs []string) (string, string, error) {
 		}
 
 	}
-	return strings.Join(ipv4s, Splitter), strings.Join(ipv6s, Splitter), nil
+	return strings.Join(ipv4s, splitter), strings.Join(ipv6s, splitter), nil
 }
 
 // isValidPort checks whether the port only has digits.
