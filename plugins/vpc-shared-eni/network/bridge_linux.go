@@ -546,6 +546,13 @@ func (nb *BridgeBuilder) createBridge(
 				log.Errorf("Failed to enable IPv4 forwarding on %s: %v.", sharedENI.GetLinkName(), err)
 				return 0, err
 			}
+
+			// Set IPv4 proxy delay to 0 to avoid ARP proxy delays
+			log.Infof("Setting IPv4 proxy delay on %s.", sharedENI.GetLinkName())
+			err = ipcfg.SetIPv4ProxyDelay(sharedENI.GetLinkName(), 0)
+			if err != nil {
+				log.Errorf("Failed to set IPv4 proxy delay on %s: %v", sharedENI.GetLinkName(), err)
+			}
 		}
 
 		if vpc.ListContainsIPv6Address(ipAddresses) {
