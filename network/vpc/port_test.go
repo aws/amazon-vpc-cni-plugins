@@ -12,7 +12,6 @@
 // permissions and limitations under the License.
 
 //go:build !integration_test || !e2e_test
-// +build !integration_test !e2e_test
 
 package vpc
 
