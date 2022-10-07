@@ -23,6 +23,7 @@ import (
 const (
 	ipv4Forwarding = "/proc/sys/net/ipv4/conf/%s/forwarding"
 	ipv4ProxyARP   = "/proc/sys/net/ipv4/conf/%s/proxy_arp"
+	ipv4ProxyDelay = "/proc/sys/net/ipv4/neigh/%s/proxy_delay"
 
 	ipv6Forwarding = "/proc/sys/net/ipv6/conf/%s/forwarding"
 	ipv6AcceptRA   = "/proc/sys/net/ipv6/conf/%s/accept_ra"
@@ -37,6 +38,11 @@ func SetIPv4Forwarding(ifName string, value int) error {
 // SetIPv4ProxyARP sets the IPv4 proxy ARP property of an interface to the given value.
 func SetIPv4ProxyARP(ifName string, value int) error {
 	return set(fmt.Sprintf(ipv4ProxyARP, ifName), value)
+}
+
+// SetIPv4ProxyDelay sets the IPv4 delay before responding to proxy ARP
+func SetIPv4ProxyDelay(ifName string, value int) error {
+	return set(fmt.Sprintf(ipv4ProxyDelay, ifName), value)
 }
 
 // SetIPv6Forwarding sets the IPv6 forwarding property of an interface to the given value.
