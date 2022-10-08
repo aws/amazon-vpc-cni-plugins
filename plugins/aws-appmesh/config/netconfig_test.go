@@ -98,8 +98,8 @@ func TestNew(t *testing.T) {
 	assert.Equal(t, "", config.IgnoredGID)
 	assert.Equal(t, "8080", config.ProxyIngressPort)
 	assert.Equal(t, "8000", config.ProxyEgressPort)
-	assert.Equal(t, "1223,2334", config.AppPorts)
-	assert.Equal(t, "80,81", config.EgressIgnoredPorts)
+	assert.Equal(t, []string{"1223", "2334"}, config.AppPorts)
+	assert.Equal(t, []string{"80", "81"}, config.EgressIgnoredPorts)
 	assert.Equal(t, "216.3.128.12,216.3.128.12/24", config.EgressIgnoredIPv4s)
 	assert.Equal(t, "2001:0db8:85a3:0000:0000:8a2e:0370:7334", config.EgressIgnoredIPv6s)
 

@@ -14,6 +14,8 @@
 package plugin
 
 import (
+	"strings"
+
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh/config"
 
@@ -27,6 +29,8 @@ const (
 	// Names of iptables chains created for App Mesh rules.
 	ingressChain = "APPMESH_INGRESS"
 	egressChain  = "APPMESH_EGRESS"
+	// Up to 15 ports can be specified when using iptables multiport module
+	multiportLimit = 15
 )
 
 // Add is the internal implementation of CNI ADD command.
@@ -172,9 +176,11 @@ func (plugin *Plugin) setupEgressRules(
 		}
 	}
 
-	if config.EgressIgnoredPorts != "" {
-		err = iptable.Append("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports",
-			config.EgressIgnoredPorts, "-j", "RETURN")
+	if len(config.EgressIgnoredPorts) > 0 {
+		err = forEachSlice(config.EgressIgnoredPorts, multiportLimit, func(ports []string) error {
+			return iptable.Append("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports", strings.Join(ports, ","), "-j", "RETURN")
+		})
+
 		if err != nil {
 			log.Errorf("Append rule for egressIgnoredPorts failed: %v", err)
 			return err
@@ -221,8 +227,10 @@ func (plugin *Plugin) setupIngressRules(
 	}
 
 	// Route everything arriving at the application port to proxy.
-	err = iptable.Append("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", config.AppPorts,
-		"-j", "REDIRECT", "--to-port", config.ProxyIngressPort)
+	err = forEachSlice(config.AppPorts, multiportLimit, func(ports []string) error {
+		return iptable.Append("nat", ingressChain, "-p", "tcp", "-m", "multiport", "--dports", strings.Join(ports, ","),
+			"-j", "REDIRECT", "--to-port", config.ProxyIngressPort)
+	})
 	if err != nil {
 		log.Errorf("Append rule to redirect traffic to proxyIngressPort failed: %v", err)
 		return err
@@ -312,6 +320,30 @@ func (plugin *Plugin) deleteEgressRules(iptable *iptables.IPTables) error {
 	if err != nil {
 		log.Errorf("Failed to delete chain[%v]: %v", egressChain, err)
 		return err
+	}
+
+	return nil
+}
+
+func forEachSlice(ss []string, size int, f func([]string) error) error {
+	s := make([]string, size)
+
+	for i, val := range ss {
+		s = append(s, val)
+
+		if (i+1)%size == 0 {
+			if err := f(s); err != nil {
+				return err
+			}
+
+			s = []string{}
+		}
+	}
+
+	if len(s) > 0 {
+		if err := f(s); err != nil {
+			return err
+		}
 	}
 
 	return nil
