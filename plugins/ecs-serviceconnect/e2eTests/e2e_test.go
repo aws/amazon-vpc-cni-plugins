@@ -11,6 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+//go:build e2e_test || ecs_serviceconnect
 // +build e2e_test ecs_serviceconnect
 
 package e2e

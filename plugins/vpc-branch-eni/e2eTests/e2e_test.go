@@ -11,7 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build e2e_test, vpc_branch_eni
+//go:build (e2e_test && ignore) || vpc_branch_eni
+// +build e2e_test,ignore vpc_branch_eni
 
 package e2e
 
