@@ -11,8 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-//go:build (e2e_test && ignore) || vpc_tunnel
-// +build e2e_test,ignore vpc_tunnel
+//go:build e2e_test && vpc_tunnel
+// +build e2e_test,vpc_tunnel
 
 package e2e
 
