@@ -45,7 +45,6 @@ COMMON_SOURCE_FILES = $(wildcard capabilities/* cni/* logger/* network/*/* versi
 VPC_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-eni -type f)
 VPC_SHARED_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-shared-eni -type f)
 VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-eni -type f)
-VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-pat-eni -type f)
 VPC_TUNNEL_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-tunnel -type f)
 AWS_APPMESH_PLUGIN_SOURCE_FILES = $(shell find plugins/aws-appmesh -type f)
 ECS_SERVICECONNECT_PLUGIN_SOURCE_FILES = $(shell find plugins/ecs-serviceconnect -type f)
@@ -56,7 +55,6 @@ ALL_SOURCE_FILES := $(shell find . -name '*.go')
 vpc-eni: $(BUILD_DIR)/vpc-eni
 vpc-shared-eni: $(BUILD_DIR)/vpc-shared-eni
 vpc-branch-eni: $(BUILD_DIR)/vpc-branch-eni
-vpc-branch-pat-eni: $(BUILD_DIR)/vpc-branch-pat-eni
 vpc-tunnel: $(BUILD_DIR)/vpc-tunnel
 aws-appmesh: $(BUILD_DIR)/aws-appmesh
 ecs-serviceconnect: $(BUILD_DIR)/ecs-serviceconnect
@@ -101,18 +99,6 @@ $(BUILD_DIR)/vpc-branch-eni: $(VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOUR
 		-o $(BUILD_DIR)/vpc-branch-eni \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-branch-eni
 	@echo "Built vpc-branch-eni plugin."
-
-# Build the vpc-branch-pat-eni CNI plugin.
-$(BUILD_DIR)/vpc-branch-pat-eni: $(VPC_BRANCH_PAT_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
-	go build \
-		-installsuffix cgo \
-		-v \
-		$(BUILD_FLAGS) \
-		-ldflags $(LINKER_FLAGS) \
-		-o $(BUILD_DIR)/vpc-branch-pat-eni \
-		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-branch-pat-eni
-	@echo "Built vpc-branch-pat-eni plugin."
 
 # Build the vpc-tunnel CNI plugin.
 $(BUILD_DIR)/vpc-tunnel: $(VPC_TUNNEL_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
