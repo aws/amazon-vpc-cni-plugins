@@ -180,19 +180,19 @@ e2e-test:  $(ALL_SOURCE_FILES) all-binaries
 
 .PHONY: appmesh-e2e-test
 appmesh-e2e-test:  $(ALL_SOURCE_FILES) aws-appmesh
-	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test aws_appmesh"  -race -timeout 120s ./plugins/aws-appmesh/e2eTests/
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test" -race -timeout 120s ./plugins/aws-appmesh/e2eTests/
 
 .PHONY: ecs-serviceconnect-e2e-test
 ecs-serviceconnect-e2e-test:  $(ALL_SOURCE_FILES) ecs-serviceconnect
-	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test ecs_serviceconnect"  -race -timeout 120s ./plugins/ecs-serviceconnect/e2eTests/
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test" -race -timeout 120s ./plugins/ecs-serviceconnect/e2eTests/
 
 .PHONY: vpc-branch-eni-e2e-tests
 vpc-branch-eni-e2e-tests: $(ALL_SOURCE_FILES) vpc-branch-eni
-	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test vpc_branch_eni" -race -timeout 60s ./plugins/vpc-branch-eni/e2eTests/
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test" -race -timeout 60s ./plugins/vpc-branch-eni/e2eTests/
 
 .PHONY: vpc-tunnel-e2e-tests
 vpc-tunnel-e2e-tests: $(ALL_SOURCE_FILES) vpc-tunnel
-	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test vpc_tunnel" -race -timeout 60s ./plugins/vpc-tunnel/e2eTests/
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test" -race -timeout 60s ./plugins/vpc-tunnel/e2eTests/
 
 # Clean all build artifacts.
 .PHONY: clean
