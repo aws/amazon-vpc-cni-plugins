@@ -11,8 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-//go:build !integration_test || !e2e_test
-// +build !integration_test !e2e_test
+//go:build unit_test
 
 package vpc
 
@@ -35,7 +34,7 @@ func TestIsValidPortWithInvalidPort(t *testing.T) {
 	ports := []string{"a", "1*ab", "-1", "1.1", "0", "65536", "", " "}
 	for _, port := range ports {
 		result := ValidatePort(port)
-		assert.Equal(t, fmt.Sprintf("invalid port [%s] specified", port), result.Error())
+		assert.Equal(t, fmt.Sprintf("invalid port %s specified", port), result.Error())
 	}
 }
 
@@ -51,6 +50,6 @@ func TestIsValidPortRangeWithInValidPort(t *testing.T) {
 	ports := []int{-200, -1, 0, 65536, 90000}
 	for _, port := range ports {
 		result := ValidatePortRange(port)
-		assert.Equal(t, fmt.Sprintf("invalid port [%d] specified", port), result.Error())
+		assert.Equal(t, fmt.Sprintf("invalid port %d specified", port), result.Error())
 	}
 }

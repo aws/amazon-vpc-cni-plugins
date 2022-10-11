@@ -161,17 +161,17 @@ PACKAGES_TO_TEST = \
 # Run all unit tests.
 .PHONY: unit-test
 unit-test:
-	go test -v -cover -race -timeout 10s $(PACKAGES_TO_TEST)
+	go test -v -tags unit_test -cover -race -timeout 10s $(PACKAGES_TO_TEST)
 
 # Run aws-appmesh unit tests.
 .PHONY: appmesh-unit-test
 appmesh-unit-test:
-	go test -v -cover -race -timeout 10s ./plugins/aws-appmesh/...
+	go test -v -tags unit_test -cover -race -timeout 10s ./plugins/aws-appmesh/...
 
 # Run ecs-serviceconnect unit tests.
 .PHONY: ecs-serviceconnect-unit-test
 ecs-serviceconnect-unit-test:
-	go test -v -cover -race -timeout 10s ./plugins/ecs-serviceconnect/...
+	go test -v -tags unit_test -cover -race -timeout 10s ./plugins/ecs-serviceconnect/...
 
 # Run all integration tests.
 .PHONY: integration-test
@@ -185,19 +185,19 @@ e2e-test:  $(ALL_SOURCE_FILES) all-binaries
 
 .PHONY: appmesh-e2e-test
 appmesh-e2e-test:  $(ALL_SOURCE_FILES) aws-appmesh
-	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test aws_appmesh"  -race -timeout 120s ./plugins/aws-appmesh/e2eTests/
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test  -race -timeout 120s ./plugins/aws-appmesh/e2eTests/
 
 .PHONY: ecs-serviceconnect-e2e-test
 ecs-serviceconnect-e2e-test:  $(ALL_SOURCE_FILES) ecs-serviceconnect
-	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test ecs_serviceconnect"  -race -timeout 120s ./plugins/ecs-serviceconnect/e2eTests/
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test  -race -timeout 120s ./plugins/ecs-serviceconnect/e2eTests/
 
 .PHONY: vpc-branch-eni-e2e-tests
 vpc-branch-eni-e2e-tests: $(ALL_SOURCE_FILES) vpc-branch-eni
-	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test vpc_branch_eni" -race -timeout 60s ./plugins/vpc-branch-eni/e2eTests/
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 60s ./plugins/vpc-branch-eni/e2eTests/
 
 .PHONY: vpc-tunnel-e2e-tests
 vpc-tunnel-e2e-tests: $(ALL_SOURCE_FILES) vpc-tunnel
-	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags "e2e_test vpc_tunnel" -race -timeout 60s ./plugins/vpc-tunnel/e2eTests/
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 60s ./plugins/vpc-tunnel/e2eTests/
 
 # Clean all build artifacts.
 .PHONY: clean
