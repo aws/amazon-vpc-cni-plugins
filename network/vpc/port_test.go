@@ -11,8 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-//go:build !integration_test || !e2e_test
-// +build !integration_test !e2e_test
+//go:build unit_test
+// +build unit_test
 
 package vpc
 

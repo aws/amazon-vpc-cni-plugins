@@ -173,11 +173,6 @@ appmesh-unit-test:
 ecs-serviceconnect-unit-test:
 	go test -v -cover -race -timeout 10s ./plugins/ecs-serviceconnect/...
 
-# Run all integration tests.
-.PHONY: integration-test
-integration-test:
-	go test -v -tags integration_test -race -timeout 10s $(PACKAGES_TO_TEST)
-
 # Run all e2e tests.
 .PHONY: e2e-test
 e2e-test:  $(ALL_SOURCE_FILES) all-binaries
