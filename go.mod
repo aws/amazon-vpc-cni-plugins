@@ -1,6 +1,6 @@
 module github.com/aws/amazon-vpc-cni-plugins
 
-go 1.17
+go 1.19
 
 require (
 	github.com/Microsoft/hcsshim v0.7.12
