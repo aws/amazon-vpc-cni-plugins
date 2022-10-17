@@ -40,8 +40,8 @@ func SetIPv4ProxyARP(ifName string, value int) error {
 	return set(fmt.Sprintf(ipv4ProxyARP, ifName), value)
 }
 
-// SetIPv4ProxyDelay sets the IPv4 delay before responding to proxy ARP
-func SetIPv4ProxyDelay(ifName string, value int) error {
+// SetIPv4ProxyARPDelay sets the IPv4 proxy ARP response delay property of an interface to the given value
+func SetIPv4ProxyARPDelay(ifName string, value int) error {
 	return set(fmt.Sprintf(ipv4ProxyDelay, ifName), value)
 }
 
