@@ -531,6 +531,13 @@ func (nb *BridgeBuilder) createBridge(
 				return 0, err
 			}
 
+			// Set IPv4 ARP proxy delay to zero to avoid delays.
+			log.Infof("Setting IPv4 proxy delay on %s.", bridgeName)
+			err = ipcfg.SetIPv4ProxyARPDelay(bridgeName, 0)
+			if err != nil {
+				log.Errorf("Failed to set IPv4 proxy delay on %s: %v", bridgeName, err)
+			}
+
 			// Enable IPv4 forwarding on the bridge and shared ENI, so that IP datagrams can be
 			// routed between them.
 			log.Infof("Enabling IPv4 forwarding on %s.", bridgeName)
