@@ -11,12 +11,13 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-//go:build e2e_test
-// +build e2e_test
+//go:build e2e-test
+// +build e2e-test
 
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -131,6 +132,7 @@ func initTest(t *testing.T) {
 // testInvalid verifies that cni ADD command returns error.
 func testInvalid(t *testing.T, meta testMeta) {
 	netConfData := loadTestData(t, meta.name)
+	ctx := context.Background()
 
 	// Create a network namespace to mimic the container's network namespace.
 	targetNS, err := netns.NewNetNS(nsName)
@@ -149,15 +151,18 @@ func testInvalid(t *testing.T, meta testMeta) {
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
 	err = invoke.ExecPluginWithoutResult(
+		ctx,
 		pluginPath,
 		netConfData,
-		execInvokeArgs)
+		execInvokeArgs,
+		nil)
 	assert.EqualError(t, err, meta.errorMsg)
 }
 
 // testValid verifies that cni ADD and DEL command succeed.
 func testValid(t *testing.T, meta testMeta) {
 	netConfData := loadTestData(t, meta.name)
+	ctx := context.Background()
 	// Create a network namespace to mimic the container's network namespace.
 	targetNS, err := netns.NewNetNS(nsName)
 	require.NoError(t, err,
@@ -175,9 +180,11 @@ func testValid(t *testing.T, meta testMeta) {
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
 	res, err := invoke.ExecPluginWithResult(
+		ctx,
 		pluginPath,
 		netConfData,
-		execInvokeArgs)
+		execInvokeArgs,
+		nil)
 	require.NoError(t, err, "Unable to execute ADD command for aws-appmesh cni plugin")
 
 	netConf, err := config.New(&skel.CmdArgs{
@@ -201,9 +208,11 @@ func testValid(t *testing.T, meta testMeta) {
 	// Execute the "DEL" command for the plugin.
 	execInvokeArgs.Command = "DEL"
 	err = invoke.ExecPluginWithoutResult(
+		ctx,
 		pluginPath,
 		netConfData,
-		execInvokeArgs)
+		execInvokeArgs,
+		nil)
 	require.NoError(t, err, "Unable to execute DEL command for aws-appmesh cni plugin")
 
 	targetNS.Run(func() error {
@@ -211,6 +220,15 @@ func testValid(t *testing.T, meta testMeta) {
 		validateIPRulesDeleted(t)
 		return nil
 	})
+
+	// Execute the "DEL" again to make sure DEL is idompotent
+	err = invoke.ExecPluginWithoutResult(
+		ctx,
+		pluginPath,
+		netConfData,
+		execInvokeArgs,
+		nil)
+	require.NoError(t, err, "Unable to execute DEL command again")
 }
 
 // loadTestData loads test cases in json form.
