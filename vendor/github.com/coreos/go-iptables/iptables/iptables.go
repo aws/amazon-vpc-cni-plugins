@@ -309,7 +309,7 @@ func (ipt *IPTables) ClearChain(table, chain string) error {
 	// different iptables modes
 	existsErr := 1
 	if ipt.mode == "nf_tables" {
-		existsErr = 4
+		existsErr = 1
 	}
 
 	eerr, eok := err.(*Error)

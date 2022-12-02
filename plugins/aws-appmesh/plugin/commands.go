@@ -319,6 +319,7 @@ func (plugin *Plugin) deleteIngressRules(
 	err = iptable.ClearChain("nat", ingressChain)
 	if err != nil {
 		log.Errorf("Failed to flush rules in chain[%v]: %v", ingressChain, err)
+		return err
 	}
 	err = iptable.DeleteChain("nat", ingressChain)
 	if err != nil {
@@ -355,6 +356,7 @@ func (plugin *Plugin) deleteEgressRules(iptable *iptables.IPTables) error {
 	err = iptable.ClearChain("nat", egressChain)
 	if err != nil {
 		log.Errorf("Failed to flush rules in chain[%v]: %v", egressChain, err)
+		return err
 	}
 	err = iptable.DeleteChain("nat", egressChain)
 	if err != nil {
