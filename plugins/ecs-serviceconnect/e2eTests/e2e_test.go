@@ -17,6 +17,7 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -98,18 +99,18 @@ func TestInvalid(t *testing.T) {
 		"invalid_egress_ipv4_cidr_2":            "invalid parameter: EgressConfig IPv4 CIDR Address",
 		"invalid_egress_ipv6_cidr_1":            "invalid parameter: EgressConfig IPv6 CIDR Address",
 		"invalid_egress_ipv6_cidr_2":            "invalid parameter: EgressConfig IPv6 CIDR Address",
-		"invalid_egress_listener_port":          "invalid port [-1] specified",
+		"invalid_egress_listener_port":          "invalid port -1 specified",
 		"invalid_egress_redirect_ip_1":          "invalid parameter: EgressConfig RedirectIP",
 		"invalid_egress_redirect_ip_2":          "missing required parameter: EgressConfig Redirect IP",
 		"invalid_egress_redirect_ip_3":          "missing required parameter: Egress ListenerPort",
 		"invalid_empty_egress":                  "exactly one of ListenerPort and RedirectIP must be specified in Egress",
 		"invalid_empty_egress_vip":              "missing required parameter: EgressConfig VIP CIDR",
-		"invalid_ingress_intercept_port":        "invalid port [-1] specified",
-		"invalid_ingress_listener_port":         "invalid port [80000] specified",
+		"invalid_ingress_intercept_port":        "invalid port -1 specified",
+		"invalid_ingress_listener_port":         "invalid port 80000 specified",
 		"invalid_missing_egress_listener_port":  "exactly one of ListenerPort and RedirectIP must be specified in Egress",
 		"invalid_missing_egress_vip":            "missing required parameter: EgressConfig VIP",
 		"invalid_missing_ingress_egress":        "either IngressConfig or EgressConfig must be present",
-		"invalid_missing_ingress_listener_port": "invalid port [0] specified",
+		"invalid_missing_ingress_listener_port": "invalid port 0 specified",
 		"invalid_v6_missing_egress_vip":         "missing required parameter: EgressConfig VIP CIDR",
 		"invalid_missing_ip":                    "both V4 and V6 cannot be disabled",
 		"invalid_missing_redirect_mode":         "invalid parameter: Egress RedirectMode",
@@ -138,6 +139,7 @@ func loadTestData(t *testing.T, name string) []byte {
 // testValid verifies that CNI ADD and DEL command succeed.
 func testValid(t *testing.T, filename string) {
 	netConfData := loadTestData(t, filename)
+	ctx := context.Background()
 	netConf, err := config.New(&skel.CmdArgs{
 		StdinData: netConfData,
 	})
@@ -175,9 +177,11 @@ func testValid(t *testing.T, filename string) {
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
 	res, err := invoke.ExecPluginWithResult(
+		ctx,
 		pluginPath,
 		netConfData,
-		execInvokeArgs)
+		execInvokeArgs,
+		nil)
 	require.NoError(t, err, "Unable to execute ADD command for ecs-serviceconnect CNI plugin")
 
 	validateResults(t, res)
@@ -191,9 +195,11 @@ func testValid(t *testing.T, filename string) {
 	// Execute the "DEL" command for the plugin.
 	execInvokeArgs.Command = "DEL"
 	err = invoke.ExecPluginWithoutResult(
+		ctx,
 		pluginPath,
 		netConfData,
-		execInvokeArgs)
+		execInvokeArgs,
+		nil)
 	require.NoError(t, err, "Unable to execute DEL command for ecs-serviceconnect CNI plugin")
 
 	targetNS.Run(func() error {
@@ -423,6 +429,7 @@ func testInvalid(t *testing.T,
 
 	// Create a network namespace to mimic the container's network namespace.
 	targetNS, err := netns.NewNetNS(nsName)
+	ctx := context.Background()
 	require.NoError(t, err,
 		"Unable to create the network namespace that represents the network namespace of the container")
 	defer targetNS.Close()
@@ -438,9 +445,11 @@ func testInvalid(t *testing.T,
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
 	err = invoke.ExecPluginWithoutResult(
+		ctx,
 		pluginPath,
 		netConfData,
-		execInvokeArgs)
+		execInvokeArgs,
+		nil)
 	assert.EqualError(t, err, errorMsg)
 }
 

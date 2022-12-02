@@ -1,4 +1,5 @@
 {
   "type": "ecs-serviceconnect",
+  "name": "serviceconnect-cni-test-config",
   "cniVersion": "0.3.0"
 }
