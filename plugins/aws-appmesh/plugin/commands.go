@@ -370,8 +370,8 @@ func forEachSlice(inputPorts []string, maximumPort int, run func([]string) error
 
 	for i, port := range inputPorts {
 		//Ignore ports after reaching multiport limit
-		if i == maximumPort-1 {
-			log.Error("multiport limit: %d exceeded, ignoring remaining rules", maximumPort)
+		if i == maximumPort {
+			log.Errorf("multiport limit: %d exceeded, ignoring remaining rules", maximumPort)
 			break
 		}
 		portList = append(portList, port)

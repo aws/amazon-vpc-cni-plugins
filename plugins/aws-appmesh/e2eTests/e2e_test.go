@@ -36,14 +36,17 @@ import (
 )
 
 const (
-	ingressChain               = "APPMESH_INGRESS"
-	egressChain                = "APPMESH_EGRESS"
-	uid                        = "1337"
-	gid                        = "133"
-	appPorts                   = "5000,5001"
-	proxyEgressPort            = "8080"
-	proxyIngressPort           = "8000"
-	egressIgnoredPorts         = "80,81"
+	ingressChain       = "APPMESH_INGRESS"
+	egressChain        = "APPMESH_EGRESS"
+	uid                = "1337"
+	gid                = "133"
+	appPorts           = "5000,5001"
+	proxyEgressPort    = "8080"
+	proxyIngressPort   = "8000"
+	egressIgnoredPorts = "80,81"
+	// we allow at most 15 ports for now
+	maximumPort                = 15
+	egressIgnoredMultiports    = "80,81,82,83,84,85,86,87,88,89,90,91,92,93,94"
 	egressIgnoredIP            = "192.168.100.0/22,163.107.163.107,2001:0db8:85a3:0000:0000:8a2e:0370:7334"
 	egressIgnoredIPv4Addresses = "192.168.100.0/22,163.107.163.107"
 	egressIgnoredIPv6Addresses = "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
@@ -71,6 +74,9 @@ func TestValid(t *testing.T) {
 		},
 		{
 			name: "valid_without_ingress",
+		},
+		{
+			name: "valid_with_multiports",
 		},
 	} {
 		t.Run(meta.name, func(t *testing.T) {
@@ -287,8 +293,15 @@ func validateEgressIptableRules(t *testing.T, proto iptables.Protocol, iptable *
 	require.NoError(t, err, "Unable to check for ignoredGID")
 	require.True(t, exist, "Failed to set ignoredGID:"+gid)
 
-	exist, err = iptable.Exists("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports",
-		egressIgnoredPorts, "-j", "RETURN")
+	// test if multiports more than maximum port number is ignored correctly
+	if len(netConf.EgressIgnoredPorts) >= maximumPort {
+		exist, err = iptable.Exists("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports",
+			egressIgnoredMultiports, "-j", "RETURN")
+	} else {
+		exist, err = iptable.Exists("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports",
+			egressIgnoredPorts, "-j", "RETURN")
+	}
+
 	require.NoError(t, err, "Unable to check for egressIgnoredPorts")
 	if len(netConf.EgressIgnoredPorts) == 0 {
 		require.False(t, exist, "Found unexpected rule for egressIgnoredPorts")
