@@ -270,6 +270,23 @@ func (plugin *Plugin) deleteIptablesRules(
 	return nil
 }
 
+//Check if a chain exists in an iptable
+func (plugin *Plugin) checkChainExists(chainName string, iptable *iptables.IPTables) (bool, error) {
+	exists := false
+	chains, err := iptable.ListChains("nat")
+	if err != nil {
+		log.Errorf("failed to list chains: %v", err)
+		return false, err
+	}
+	for _, ch := range chains {
+		if ch == chainName {
+			exists = true
+			break
+		}
+	}
+	return exists, nil
+}
+
 // deleteIngressRules deletes the iptable rules for ingress traffic.
 func (plugin *Plugin) deleteIngressRules(
 	iptable *iptables.IPTables,
@@ -279,17 +296,9 @@ func (plugin *Plugin) deleteIngressRules(
 	}
 
 	//Check if ingress chain exist before deleting
-	exists := false
-	chains, err := iptable.ListChains("nat")
+	exists, err := plugin.checkChainExists(ingressChain, iptable)
 	if err != nil {
-		log.Errorf("failed to list chains: %v", err)
 		return err
-	}
-	for _, ch := range chains {
-		if ch == ingressChain {
-			exists = true
-			break
-		}
 	}
 	//return nil to make sure deleting process is idempotent
 	if !exists {
@@ -324,17 +333,10 @@ func (plugin *Plugin) deleteIngressRules(
 // deleteEgressRules deletes the iptable rules for egress traffic.
 func (plugin *Plugin) deleteEgressRules(iptable *iptables.IPTables) error {
 
-	// Check if egress chain exist before deleting
-	exists := false
-	chains, err := iptable.ListChains("nat")
+	//Check if ingress chain exist before deleting
+	exists, err := plugin.checkChainExists(egressChain, iptable)
 	if err != nil {
-		return log.Errorf("failed to list chains: %v", err)
-	}
-	for _, ch := range chains {
-		if ch == egressChain {
-			exists = true
-			break
-		}
+		return err
 	}
 	//return nil to make sure deleting process is idempotent
 	if !exists {
