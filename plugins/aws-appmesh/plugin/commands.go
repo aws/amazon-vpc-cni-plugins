@@ -277,9 +277,22 @@ func (plugin *Plugin) deleteIngressRules(
 	if config.ProxyIngressPort == "" {
 		return nil
 	}
+
+	//Check if ingress chain exist before deleting
+	exists, err := iptable.ChainExists("nat", ingressChain)
+	if err != nil {
+		return err
+	}
+	//return nil to make sure deleting process is idempotent
+	if !exists {
+		log.Warn("deleting a non-existent ingress chain: %s", ingressChain)
+		return nil
+	}
+
 	// Delete ingress rule from iptables.
-	err := iptable.Delete("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!", "--src-type",
+	err = iptable.Delete("nat", "PREROUTING", "-p", "tcp", "-m", "addrtype", "!", "--src-type",
 		"LOCAL", "-j", ingressChain)
+
 	if err != nil {
 		log.Errorf("Delete the rule in PREROUTING chain failed: %v", err)
 		return err
@@ -302,8 +315,20 @@ func (plugin *Plugin) deleteIngressRules(
 
 // deleteEgressRules deletes the iptable rules for egress traffic.
 func (plugin *Plugin) deleteEgressRules(iptable *iptables.IPTables) error {
+
+	//Check if ingress chain exist before deleting
+	exists, err := iptable.ChainExists("nat", egressChain)
+	if err != nil {
+		return err
+	}
+	//return nil to make sure deleting process is idempotent
+	if !exists {
+		log.Warn("deleting a non-existent egress chain: %s", egressChain)
+		return nil
+	}
+
 	// Delete egress rule from iptables.
-	err := iptable.Delete("nat", "OUTPUT", "-p", "tcp", "-m", "addrtype", "!", "--dst-type",
+	err = iptable.Delete("nat", "OUTPUT", "-p", "tcp", "-m", "addrtype", "!", "--dst-type",
 		"LOCAL", "-j", egressChain)
 	if err != nil {
 		log.Errorf("Delete the rule in OUTPUT chain failed: %v", err)
@@ -325,23 +350,21 @@ func (plugin *Plugin) deleteEgressRules(iptable *iptables.IPTables) error {
 	return nil
 }
 
-func forEachSlice(ss []string, size int, f func([]string) error) error {
-	s := make([]string, size)
+func forEachSlice(inputPorts []string, maximumPort int, run func([]string) error) error {
+	portList := make([]string, 0)
 
-	for i, val := range ss {
-		s = append(s, val)
-
-		if (i+1)%size == 0 {
-			if err := f(s); err != nil {
-				return err
-			}
-
-			s = []string{}
+	for i, port := range inputPorts {
+		//Ignore ports after reaching multiport limit
+		if i == maximumPort {
+			log.Errorf("multiport limit: %d exceeded, ignoring remaining rules", maximumPort)
+			break
 		}
+		portList = append(portList, port)
 	}
 
-	if len(s) > 0 {
-		if err := f(s); err != nil {
+	if len(portList) > 0 {
+		err := run(portList)
+		if err != nil {
 			return err
 		}
 	}

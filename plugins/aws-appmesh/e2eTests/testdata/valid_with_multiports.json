@@ -1,17 +1,39 @@
 {
+    "prevResult": {
+        "IPs": [{"Version":"4","Address":"10.1.2.3/16"}]
+    },
     "type": "aws-appmesh",
     "cniVersion": "0.3.0",
     "name":"aws-appmesh-cni-plugin",
     "ignoredUID": "1337",
     "ignoredGID": "133",
     "proxyEgressPort": "8080",
+    "proxyIngressPort": "8000",
     "appPorts": [
         "5000",
         "5001"
     ],
     "egressIgnoredPorts": [
         "80",
-        "81"
+        "81",
+        "82",
+        "83",
+        "84",
+        "85",
+        "86",
+        "87",
+        "88",
+        "89",
+        "90",
+        "91",
+        "92",
+        "93",
+        "94",
+        "95",
+        "96",
+        "97",
+        "98",
+        "99"
     ],
     "egressIgnoredIPs": [
         "192.168.100.0/22",

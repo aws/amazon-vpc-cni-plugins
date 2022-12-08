@@ -1,6 +1,7 @@
 {
     "type": "aws-appmesh",
     "cniVersion": "0.3.0",
+    "name":"aws-appmesh-cni-plugin",
     "ignoredUID": "1337",
     "ignoredGID": "133",
     "proxyIngressPort": "8000",
