@@ -17,6 +17,7 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -26,6 +27,7 @@ import (
 	"time"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
+	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,6 +48,7 @@ const (
 	netConfJsonFmt     = `
 {
 	"type": "vpc-branch-eni",
+	"name": "vpc-branch-eni-test-network",
 	"cniVersion":"0.3.0",
 	"trunkName": "%s",
 	"branchVlanID": "%s",
@@ -58,6 +61,7 @@ const (
 	netConfJsonFmtBlockIMDS = `
 {
 	"type": "vpc-branch-eni",
+	"name": "vpc-branch-eni-test-network",
 	"cniVersion":"0.3.0",
 	"trunkName": "%s",
 	"branchVlanID": "%s",
@@ -140,9 +144,11 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
 	err = invoke.ExecPluginWithoutResult(
+		context.Background(),
 		pluginPath,
 		netConf,
-		execInvokeArgs)
+		execInvokeArgs,
+		nil)
 	require.NoError(t, err, "Unable to execute ADD command for vpc-branch-eni cni plugin")
 
 	targetNS.Run(func() error {
@@ -153,9 +159,11 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 	// Execute the "DEL" command for the plugin.
 	execInvokeArgs.Command = "DEL"
 	err = invoke.ExecPluginWithoutResult(
+		context.Background(),
 		pluginPath,
 		netConf,
-		execInvokeArgs)
+		execInvokeArgs,
+		nil)
 	require.NoError(t, err, "Unable to execute DEL command for vpc-branch-eni cni plugin")
 
 	targetNS.Run(func() error {
@@ -193,9 +201,11 @@ func validateAfterAddBlockIMDS(t *testing.T) {
 	validateAfterAdd(t)
 
 	// Check that there's no route to go to IMDS endpoint.
-	imdsIP := net.ParseIP("169.254.169.254")
-	_, err := netlink.RouteGet(imdsIP)
-	assert.Error(t, err)
+	for _, ep := range vpc.InstanceMetadataEndpoints {
+		imdsIP := net.ParseIP(ep)
+		_, err := netlink.RouteGet(imdsIP)
+		assert.Error(t, err)
+	}
 }
 
 func validateAfterDel(t *testing.T) {
