@@ -25,23 +25,23 @@ import (
 
 // BlockInstanceMetadataEndpoint adds a blackhole rule for IMDS endpoint.
 func BlockInstanceMetadataEndpoint() error {
-	log.Infof("Adding route to block instance metadata endpoint %s", vpc.InstanceMetadataEndpoint)
-	_, imdsNetwork, err := net.ParseCIDR(vpc.InstanceMetadataEndpoint)
-	if err != nil {
-		// This should never happen because we always expect
-		// 169.254.169.254/32 to be parsed without any errors.
-		log.Errorf("Unable to parse instance metadata endpoint %s", vpc.InstanceMetadataEndpoint)
-		return err
-	}
+	for _, ep := range vpc.InstanceMetadataEndpoints {
+		log.Infof("Adding route to block instance metadata endpoint %s", ep)
+		_, imdsNetwork, err := net.ParseCIDR(ep)
+		if err != nil {
+			// This should never happen as these IP addresses are hardcoded.
+			log.Errorf("Unable to parse instance metadata endpoint %s", ep)
+			return err
+		}
 
-	err = netlink.RouteAdd(&netlink.Route{
-		Dst:  imdsNetwork,
-		Type: syscall.RTN_BLACKHOLE,
-	})
-	if err != nil {
-		log.Errorf("Unable to add route to block instance metadata: %v", err)
-		return err
+		err = netlink.RouteAdd(&netlink.Route{
+			Dst:  imdsNetwork,
+			Type: syscall.RTN_BLACKHOLE,
+		})
+		if err != nil {
+			log.Errorf("Unable to add route to block instance metadata: %v", err)
+			return err
+		}
 	}
-
 	return nil
 }
