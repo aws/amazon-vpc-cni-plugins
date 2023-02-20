@@ -16,9 +16,11 @@ package vpc
 const (
 	// JumboFrameMTU is the VPC jumbo Ethernet frame Maximum Transmission Unit size in bytes.
 	JumboFrameMTU = 9001
+	// InstanceMetadataEndpointIPv4 represents the IMDS endpoint over IPv4.
+	InstanceMetadataEndpointIPv4 = "169.254.169.254/32"
 )
 
 var (
 	// InstanceMetadataEndpoints is the list of EC2 instance metadata endpoints.
-	InstanceMetadataEndpoints = []string{"169.254.169.254/32", "fd00:ec2::254/128"}
+	InstanceMetadataEndpoints = []string{InstanceMetadataEndpointIPv4, "fd00:ec2::254/128"}
 )
