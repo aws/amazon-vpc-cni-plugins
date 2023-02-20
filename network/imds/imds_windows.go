@@ -32,8 +32,11 @@ const (
 )
 
 // BlockInstanceMetadataEndpoint blocks the IMDS endpoint for Windows by creating HNS ACLs.
+// Currently we block IMDS endpoint over IPv4 only. We will want to block the IPv6 endpoint as
+// well once HNS ACLs support IPv6.
 func BlockInstanceMetadataEndpoint(hnsEndpoint *hcsshim.HNSEndpoint) error {
-	log.Infof("Adding ACLs to block instance metadata endpoint %s", vpc.InstanceMetadataEndpoint)
+	log.Infof("Adding ACLs to block instance metadata endpoint %s",
+		vpc.InstanceMetadataEndpointIPv4)
 	// Create an ACL policy to block traffic to instance metadata endpoint.
 	err := addEndpointPolicy(
 		hnsEndpoint,
@@ -41,7 +44,7 @@ func BlockInstanceMetadataEndpoint(hnsEndpoint *hcsshim.HNSEndpoint) error {
 			Type:            hcsshim.ACL,
 			Action:          hcsshim.Block,
 			Direction:       hcsshim.Out,
-			RemoteAddresses: vpc.InstanceMetadataEndpoint,
+			RemoteAddresses: vpc.InstanceMetadataEndpointIPv4,
 			Protocol:        hnsAclPolicyAllProtocols,
 			Priority:        hnsAclPolicyHighPriority,
 		})
