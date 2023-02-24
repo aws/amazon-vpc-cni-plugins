@@ -9,7 +9,7 @@ require (
 	github.com/coreos/go-iptables v0.6.0
 	github.com/stretchr/testify v1.2.2
 	github.com/vishvananda/netlink v1.1.1-0.20210316144550-c21bda41e995
-	golang.org/x/sys v0.0.0-20200728102440-3e129f6d46b1
+	golang.org/x/sys v0.1.0
 )
 
 require (
@@ -21,7 +21,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.1.1 // indirect
 	github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae // indirect
-	golang.org/x/crypto v0.0.0-20181015023909-0c41d7ab0a0e // indirect
-	golang.org/x/net v0.0.0-20190108225652-1e06a53dbb7e // indirect
+	golang.org/x/crypto v0.1.0 // indirect
+	golang.org/x/term v0.1.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 )
