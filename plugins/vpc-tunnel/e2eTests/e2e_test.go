@@ -17,6 +17,7 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -124,11 +125,18 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 	netConf := []byte(netConfJson)
 
 	// Execute the "ADD" command for the plugin.
+	/*
+		invoke.DefaultExec reads plugins from the disk and runs them
+		if we ever want to change this behavior, we need to pass in
+		something that implements the invoke.Exec interface.
+	*/
 	execInvokeArgs.Command = "ADD"
 	err = invoke.ExecPluginWithoutResult(
+		context.TODO(),
 		pluginPath,
 		netConf,
-		execInvokeArgs)
+		execInvokeArgs,
+		invoke.DefaultExec)
 	require.NoError(t, err, "Unable to execute ADD command for vpc-tunnel cni plugin")
 
 	targetNS.Run(func() error {
@@ -137,11 +145,18 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 	})
 
 	// Execute the "DEL" command for the plugin.
+	/*
+		invoke.DefaultExec reads plugins from the disk and runs them
+		if we ever want to change this behavior, we need to pass in
+		something that implements the invoke.Exec interface.
+	*/
 	execInvokeArgs.Command = "DEL"
 	err = invoke.ExecPluginWithoutResult(
+		context.TODO(),
 		pluginPath,
 		netConf,
-		execInvokeArgs)
+		execInvokeArgs,
+		invoke.DefaultExec)
 	require.NoError(t, err, "Unable to execute DEL command for vpc-tunnel cni plugin")
 
 	targetNS.Run(func() error {
