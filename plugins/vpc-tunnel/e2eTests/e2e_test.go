@@ -81,8 +81,11 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 		if we ever want to change this behavior, we need to pass in
 		something that implements the invoke.Exec interface.
 	*/
-	var defaultExec = &(invoke.DefaultExec){
-		RawExec: &(invoke.RawExec){Stderr: os.Stderr},
+	rawExecInstance := invoke.RawExec{
+		stderr: os.Stderr,
+	}
+	defaultExec := &(invoke.DefaultExec){
+		RawExec: &rawExecInstance
 	}
 
 	// Ensure that the cni plugin exists.
