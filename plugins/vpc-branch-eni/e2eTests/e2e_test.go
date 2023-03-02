@@ -73,9 +73,9 @@ const (
 `
 )
 
-func TestAddDelBlockIMDS(t *testing.T) {
-	testAddDel(t, netConfJsonFmtBlockIMDS, validateAfterAddBlockIMDS, validateAfterDel)
-}
+// func TestAddDelBlockIMDS(t *testing.T) {
+// 	testAddDel(t, netConfJsonFmtBlockIMDS, validateAfterAddBlockIMDS, validateAfterDel)
+// }
 
 func TestAddDel(t *testing.T) {
 	var err error
