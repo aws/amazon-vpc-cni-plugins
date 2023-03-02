@@ -19,7 +19,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -467,7 +466,7 @@ func getEnvOrDefault(name string, fallback string) string {
 // and a bool that represents whether to preserve logfiles after execution.
 func setupLogs(t *testing.T, testCase string) (string, bool) {
 	// Create a directory for storing test logs.
-	testLogDir, err := ioutil.TempDir("", pluginName+"-cni-e2eTests-test")
+	testLogDir, err := os.MkdirTemp("", pluginName+"-cni-e2eTests-test")
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	// Configure the env var to use the test logs directory.

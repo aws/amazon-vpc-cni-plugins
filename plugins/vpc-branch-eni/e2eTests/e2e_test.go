@@ -19,7 +19,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"strconv"
@@ -98,7 +97,7 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 	require.NoError(t, err, "Unable to find vpc-branch-eni plugin in path")
 
 	// Create a directory for storing test logs.
-	testLogDir, err := ioutil.TempDir("", "vpc-branch-eni-cni-e2eTests-test-")
+	testLogDir, err := os.MkdirTemp("", "vpc-branch-eni-cni-e2eTests-test-")
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	// Configure the env var to use the test logs directory.

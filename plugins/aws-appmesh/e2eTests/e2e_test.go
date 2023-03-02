@@ -19,7 +19,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -117,7 +116,7 @@ func initTest(t *testing.T) {
 	require.NoError(t, err, "Unable to find aws-appmesh plugin in path")
 
 	// Create a directory for storing test logs.
-	testLogDir, err := ioutil.TempDir("", "aws-appmesh-cni-e2eTests-test-")
+	testLogDir, err := os.MkdirTemp("", "aws-appmesh-cni-e2eTests-test-")
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	// Configure the env var to use the test logs directory.
