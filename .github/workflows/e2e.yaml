@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+env:
+  ECS_PRESERVE_E2E_TEST_LOGS: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
