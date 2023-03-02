@@ -467,6 +467,7 @@ func getEnvOrDefault(name string, fallback string) string {
 func setupLogs(t *testing.T, testCase string) (string, bool) {
 	// Create a directory for storing test logs.
 	testLogDir, err := os.MkdirTemp("", pluginName+"-cni-e2eTests-test")
+	err = os.Chmod(testLogDir, "0755")
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	// Configure the env var to use the test logs directory.

@@ -117,6 +117,7 @@ func initTest(t *testing.T) {
 
 	// Create a directory for storing test logs.
 	testLogDir, err := os.MkdirTemp("", "aws-appmesh-cni-e2eTests-test-")
+	err = os.Chmod(testLogDir, "0755")
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	// Configure the env var to use the test logs directory.
