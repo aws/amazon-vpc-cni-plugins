@@ -76,18 +76,6 @@ func TestAddDel(t *testing.T) {
 }
 
 func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, validateAfterDelFunc func(*testing.T)) {
-	/*
-		defaultExec reads plugins from the disk and runs them
-		if we ever want to change this behavior, we need to pass in
-		something that implements the invoke.Exec interface.
-	*/
-	rawExecInstance := invoke.RawExec{
-		stderr: os.Stderr,
-	}
-	defaultExec := &invoke.DefaultExec{
-		RawExec: &rawExecInstance
-	}
-
 	// Ensure that the cni plugin exists.
 	pluginPath, err := invoke.FindInPath("vpc-tunnel", []string{os.Getenv("CNI_PATH")})
 	require.NoError(t, err, "Unable to find vpc-tunnel plugin in path")
@@ -139,11 +127,11 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
 	err = invoke.ExecPluginWithoutResult(
-		context.TODO(),
+		context.Background(),
 		pluginPath,
 		netConf,
 		execInvokeArgs,
-		invoke.DefaultExec)
+		nil)
 	require.NoError(t, err, "Unable to execute ADD command for vpc-tunnel cni plugin")
 
 	targetNS.Run(func() error {
@@ -154,11 +142,11 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 	// Execute the "DEL" command for the plugin.
 	execInvokeArgs.Command = "DEL"
 	err = invoke.ExecPluginWithoutResult(
-		context.TODO(),
+		context.Background(),
 		pluginPath,
 		netConf,
 		execInvokeArgs,
-		invoke.DefaultExec)
+		nil)
 	require.NoError(t, err, "Unable to execute DEL command for vpc-tunnel cni plugin")
 
 	targetNS.Run(func() error {

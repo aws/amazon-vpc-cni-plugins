@@ -20,4 +20,4 @@ jobs:
         if: failure()
         with:
           name: testlogs
-          path: /tmp/*-e2etests*/*
+          path: /tmp/*-e2eTests-*/*
