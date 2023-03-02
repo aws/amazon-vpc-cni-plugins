@@ -117,7 +117,7 @@ func initTest(t *testing.T) {
 
 	// Create a directory for storing test logs.
 	testLogDir, err := os.MkdirTemp("", "aws-appmesh-cni-e2eTests-test-")
-	err = os.Chmod(testLogDir, "0755")
+	err = os.Chmod(testLogDir, 0755)
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	// Configure the env var to use the test logs directory.
@@ -240,7 +240,7 @@ func testValid(t *testing.T, meta testMeta) {
 // loadTestData loads test cases in json form.
 func loadTestData(t *testing.T, name string) []byte {
 	path := filepath.Join("testdata", name+".json")
-	bytes, err := ioutil.ReadFile(path)
+	bytes, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}

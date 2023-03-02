@@ -128,7 +128,7 @@ func loadTestData(t *testing.T, name string) []byte {
 		t.Fatal(err)
 	}
 	path := filepath.Join(filepath.Dir(wd), "testdata", name+".json")
-	bytes, err := ioutil.ReadFile(path)
+	bytes, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -467,7 +467,7 @@ func getEnvOrDefault(name string, fallback string) string {
 func setupLogs(t *testing.T, testCase string) (string, bool) {
 	// Create a directory for storing test logs.
 	testLogDir, err := os.MkdirTemp("", pluginName+"-cni-e2eTests-test")
-	err = os.Chmod(testLogDir, "0755")
+	err = os.Chmod(testLogDir, 0755)
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	// Configure the env var to use the test logs directory.
