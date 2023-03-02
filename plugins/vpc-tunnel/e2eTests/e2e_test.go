@@ -84,7 +84,7 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 	rawExecInstance := invoke.RawExec{
 		stderr: os.Stderr,
 	}
-	defaultExec := &(invoke.DefaultExec){
+	defaultExec := &invoke.DefaultExec{
 		RawExec: &rawExecInstance
 	}
 
