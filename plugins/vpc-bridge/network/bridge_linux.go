@@ -23,7 +23,7 @@ import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/ipcfg"
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
-	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/config"
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-bridge/config"
 
 	log "github.com/cihub/seelog"
 	"github.com/vishvananda/netlink"

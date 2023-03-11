@@ -15,8 +15,8 @@ package plugin
 
 import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
-	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/config"
-	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/network"
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-bridge/config"
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-bridge/network"
 
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"

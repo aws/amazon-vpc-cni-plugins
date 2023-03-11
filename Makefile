@@ -43,8 +43,8 @@ LINKER_FLAGS = "\
 # Source files.
 COMMON_SOURCE_FILES = $(wildcard capabilities/* cni/* logger/* network/*/* version/*)
 VPC_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-eni -type f)
-VPC_SHARED_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-shared-eni -type f)
 VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-branch-eni -type f)
+VPC_BRIDGE_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-bridge -type f)
 VPC_TUNNEL_PLUGIN_SOURCE_FILES = $(shell find plugins/vpc-tunnel -type f)
 AWS_APPMESH_PLUGIN_SOURCE_FILES = $(shell find plugins/aws-appmesh -type f)
 ECS_SERVICECONNECT_PLUGIN_SOURCE_FILES = $(shell find plugins/ecs-serviceconnect -type f)
@@ -53,13 +53,13 @@ ALL_SOURCE_FILES := $(shell find . -name '*.go')
 
 # Shorthand build targets.
 vpc-eni: $(BUILD_DIR)/vpc-eni
-vpc-shared-eni: $(BUILD_DIR)/vpc-shared-eni
 vpc-branch-eni: $(BUILD_DIR)/vpc-branch-eni
+vpc-bridge: $(BUILD_DIR)/vpc-bridge
 vpc-tunnel: $(BUILD_DIR)/vpc-tunnel
 aws-appmesh: $(BUILD_DIR)/aws-appmesh
 ecs-serviceconnect: $(BUILD_DIR)/ecs-serviceconnect
 netnsexec: $(BUILD_DIR)/netnsexec
-all-plugins: vpc-eni vpc-shared-eni vpc-branch-eni vpc-tunnel aws-appmesh ecs-serviceconnect
+all-plugins: vpc-eni vpc-branch-eni vpc-bridge vpc-tunnel aws-appmesh ecs-serviceconnect
 all-tools: netnsexec
 all-binaries: all-plugins all-tools
 build: all-binaries unit-test
@@ -76,18 +76,6 @@ $(BUILD_DIR)/vpc-eni: $(VPC_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-eni
 	@echo "Built vpc-eni plugin."
 
-# Build the vpc-shared-eni CNI plugin.
-$(BUILD_DIR)/vpc-shared-eni: $(VPC_SHARED_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
-	go build \
-		-installsuffix cgo \
-		-v \
-		$(BUILD_FLAGS) \
-		-ldflags $(LINKER_FLAGS) \
-		-o $(BUILD_DIR)/vpc-shared-eni \
-		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni
-	@echo "Built vpc-shared-eni plugin."
-
 # Build the vpc-branch-eni CNI plugin.
 $(BUILD_DIR)/vpc-branch-eni: $(VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
 	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
@@ -99,6 +87,18 @@ $(BUILD_DIR)/vpc-branch-eni: $(VPC_BRANCH_ENI_PLUGIN_SOURCE_FILES) $(COMMON_SOUR
 		-o $(BUILD_DIR)/vpc-branch-eni \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-branch-eni
 	@echo "Built vpc-branch-eni plugin."
+
+# Build the vpc-bridge CNI plugin.
+$(BUILD_DIR)/vpc-bridge: $(VPC_BRIDGE_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
+	go build \
+		-installsuffix cgo \
+		-v \
+		$(BUILD_FLAGS) \
+		-ldflags $(LINKER_FLAGS) \
+		-o $(BUILD_DIR)/vpc-bridge \
+		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-bridge
+	@echo "Built vpc-bridge plugin."
 
 # Build the vpc-tunnel CNI plugin.
 $(BUILD_DIR)/vpc-tunnel: $(VPC_TUNNEL_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
@@ -178,14 +178,6 @@ ecs-serviceconnect-unit-test:
 e2e-test:  $(ALL_SOURCE_FILES) all-binaries
 	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 120s $(PACKAGES_TO_TEST)
 
-.PHONY: appmesh-e2e-test
-appmesh-e2e-test:  $(ALL_SOURCE_FILES) aws-appmesh
-	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test  -race -timeout 120s ./plugins/aws-appmesh/e2eTests/
-
-.PHONY: ecs-serviceconnect-e2e-test
-ecs-serviceconnect-e2e-test:  $(ALL_SOURCE_FILES) ecs-serviceconnect
-	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test  -race -timeout 120s ./plugins/ecs-serviceconnect/e2eTests/
-
 .PHONY: vpc-branch-eni-e2e-tests
 vpc-branch-eni-e2e-tests: $(ALL_SOURCE_FILES) vpc-branch-eni
 	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 60s ./plugins/vpc-branch-eni/e2eTests/
@@ -193,6 +185,14 @@ vpc-branch-eni-e2e-tests: $(ALL_SOURCE_FILES) vpc-branch-eni
 .PHONY: vpc-tunnel-e2e-tests
 vpc-tunnel-e2e-tests: $(ALL_SOURCE_FILES) vpc-tunnel
 	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 60s ./plugins/vpc-tunnel/e2eTests/
+
+.PHONY: appmesh-e2e-test
+appmesh-e2e-test:  $(ALL_SOURCE_FILES) aws-appmesh
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 120s ./plugins/aws-appmesh/e2eTests/
+
+.PHONY: ecs-serviceconnect-e2e-test
+ecs-serviceconnect-e2e-test:  $(ALL_SOURCE_FILES) ecs-serviceconnect
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 120s ./plugins/ecs-serviceconnect/e2eTests/
 
 # Clean all build artifacts.
 .PHONY: clean
