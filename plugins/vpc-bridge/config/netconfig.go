@@ -27,7 +27,7 @@ import (
 	cniTypes "github.com/containernetworking/cni/pkg/types"
 )
 
-// NetConfig defines the network configuration for the vpc-shared-eni plugin.
+// NetConfig defines the network configuration for the vpc-bridge plugin.
 type NetConfig struct {
 	cniTypes.NetConf
 	ENIName          string
@@ -43,7 +43,7 @@ type NetConfig struct {
 	Kubernetes       *KubernetesConfig
 }
 
-// netConfigJSON defines the network configuration JSON file format for the vpc-shared-eni plugin.
+// netConfigJSON defines the network configuration JSON file format for the vpc-bridge plugin.
 type netConfigJSON struct {
 	cniTypes.NetConf
 	ENIName          string   `json:"eniName"`

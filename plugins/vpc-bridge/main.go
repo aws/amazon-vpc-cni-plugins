@@ -16,10 +16,10 @@ package main
 import (
 	"os"
 
-	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/plugin"
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-bridge/plugin"
 )
 
-// main is the entry point for vpc-shared-eni plugin executable.
+// main is the entry point for vpc-bridge plugin executable.
 func main() {
 	plugin, err := plugin.NewPlugin()
 	if err != nil {

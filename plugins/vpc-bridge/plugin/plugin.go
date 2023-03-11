@@ -15,17 +15,17 @@ package plugin
 
 import (
 	"github.com/aws/amazon-vpc-cni-plugins/cni"
-	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-shared-eni/network"
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-bridge/network"
 
 	cniVersion "github.com/containernetworking/cni/pkg/version"
 )
 
 const (
 	// pluginName is the name of the plugin as specified in CNI config files.
-	pluginName = "vpc-shared-eni"
+	pluginName = "vpc-bridge"
 
 	// logFilePath is the path to the plugin's log file.
-	logFilePath = "/var/log/vpc-shared-eni.log"
+	logFilePath = "/var/log/vpc-bridge.log"
 )
 
 var (
@@ -33,7 +33,7 @@ var (
 	specVersions = cniVersion.PluginSupports("0.3.0", "0.3.1")
 )
 
-// Plugin represents a vpc-shared-eni CNI plugin.
+// Plugin represents a vpc-bridge CNI plugin.
 type Plugin struct {
 	*cni.Plugin
 	nb network.Builder
