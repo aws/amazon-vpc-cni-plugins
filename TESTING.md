@@ -29,3 +29,39 @@ There are also some specific Make targets included to help with more directed te
 | `vpc-tunnel-e2e-tests`         | Run only the the `vpc-tunnel` plugin end to end tests         |
 | `appmesh-e2e-tests`            | Run only the the `aws-appmesh` plugin end to end tests        |
 | `ecs-serviceconnect-e2e-test`  | Run only the the `ecs-serviceconnect` plugin end to end tests |
+
+## Debugging
+
+If you're running VS Code, here is a sample `launch.json` that can help set up debugging for the tests. Something to note is that since these tests run with elevated privileges, it is always a good idea to not stop a test in the middle of execution because it might leave behind resources that need cleaned up.
+
+```json
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug e2e test",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${fileDirname}",
+      "asRoot": true,
+      "console": "integratedTerminal",
+      "buildFlags": "-tags=e2e_test",
+      "env": {
+        "CNI_PATH": "${input:computedCniPath}"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "computedCniPath",
+      "description": "Optional, the path to the CNI plugin build in case the OS or the arch are different.",
+      "type": "promptString",
+      "default": "${workspaceFolder}${pathSeparator}build${pathSeparator}linux_amd64"
+    }
+  ]
+}
+```
