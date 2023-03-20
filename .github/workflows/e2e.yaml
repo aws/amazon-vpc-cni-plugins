@@ -11,11 +11,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: setup Go
+      - name: checkout code
+        uses: actions/checkout@v3
+      - name: setup go
         uses: actions/setup-go@v3
         with:
           go-version: '1.19.x'
+      - name: pretest
+        run: sudo ip link add eth1 type dummy
       - name: test
         run: make e2e-test
       - name: upload failed test artifacts
