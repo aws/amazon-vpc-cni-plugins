@@ -18,7 +18,10 @@ jobs:
         with:
           go-version: '1.19.x'
       - name: pretest
-        run: sudo ip link add eth1 type dummy
+        run: |
+          ip link show
+          sudo ip link add eth1 type dummy
+          ip link show
       - name: test
         run: make e2e-test
       - name: upload failed test artifacts
