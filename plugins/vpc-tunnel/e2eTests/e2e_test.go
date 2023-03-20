@@ -35,7 +35,7 @@ import (
 
 const (
 	containerID        = "container_1"
-	nsName             = "testNS"
+	nsName             = "vpcTunnelTestNS"
 	vni                = "CB0CF5"
 	geneveIPv4Address  = "169.254.0.1/31"
 	gatewayIPv4Address = "169.254.0.0"
@@ -46,6 +46,7 @@ const (
 	netConfJsonFmt     = `
 {
 	"type": "vpc-tunnel",
+	"name": "vpc-tunnel-e2e-testnet",
 	"cniVersion":"0.3.0",
 	"destinationIPAddress": "%s",
 	"vni": "%s",

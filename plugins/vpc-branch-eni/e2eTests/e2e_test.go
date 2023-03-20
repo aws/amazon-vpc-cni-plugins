@@ -36,7 +36,7 @@ import (
 const (
 	containerID        = "container_1"
 	ifName             = "testIf"
-	nsName             = "testNS"
+	nsName             = "vpcBranchEniTestNS"
 	trunkName          = "eth1"
 	branchVlanID       = "101"
 	branchMACAddress   = "02:e1:48:75:86:a4"
@@ -73,9 +73,9 @@ const (
 `
 )
 
-// func TestAddDelBlockIMDS(t *testing.T) {
-// 	testAddDel(t, netConfJsonFmtBlockIMDS, validateAfterAddBlockIMDS, validateAfterDel)
-// }
+func TestAddDelBlockIMDS(t *testing.T) {
+	testAddDel(t, netConfJsonFmtBlockIMDS, validateAfterAddBlockIMDS, validateAfterDel)
+}
 
 func TestAddDel(t *testing.T) {
 	var err error
