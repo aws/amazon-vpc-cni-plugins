@@ -15,6 +15,8 @@ There is some tooling that needs to be in place for the tests to be able to run,
 
 For the end to end tests, a successful build is also required. A build can be triggered by running `make build`.
 
+The tests commonly reference a network interface by the name of `eth1`. If the tests are being run in an environment that does not include an `eth1` interface, a dummy `eth1` interface can be created by running `ip link add eth1 type dummy`. Elevated privilege (`sudo`) might be necessary to run the command. The existing interfaces can be checked at any time using `ip link show`.
+
 ## Running
 
 The unit tests can be run using `make unit-test` and the end to end tests can be run using `make e2e-test`.
