@@ -138,7 +138,7 @@ func testAddDel(
 	netNsName string,
 	interfaceName string,
 	validateAfterAddFunc,
-	validateAfterDelFunc func(*testing.T),
+	validateAfterDelFunc func(*testing.T, string, NetconfFieldsMap),
 ) {
 	// Ensure that the cni plugin exists.
 	pluginPath, err := invoke.FindInPath("vpc-branch-eni", []string{os.Getenv("CNI_PATH")})
@@ -202,7 +202,7 @@ func testAddDel(
 	require.NoError(t, err, "Unable to execute ADD command for vpc-branch-eni cni plugin")
 
 	targetNS.Run(func() error {
-		validateAfterAddFunc(t)
+		validateAfterAddFunc(t, interfaceName, inputNetconfFields)
 		return nil
 	})
 
@@ -217,25 +217,17 @@ func testAddDel(
 	require.NoError(t, err, "Unable to execute DEL command for vpc-branch-eni cni plugin")
 
 	targetNS.Run(func() error {
-		validateAfterDelFunc(t)
+		validateAfterDelFunc(t, interfaceName, inputNetconfFields)
 		return nil
 	})
 }
 
-func validateAfterAdd(t *testing.T) {
-	validateAfterAddCommon(
-		t,
-		ifName,
-		netconfFields(),
-	)
-}
-
-func validateAfterAddBlockIMDS(t *testing.T) {
-	validateAfterAddCommon(
-		t,
-		ifNameBlockIMDS,
-		netconfFieldsBlockIMDS(),
-	)
+func validateAfterAddBlockIMDS(
+	t *testing.T,
+	interfaceName string,
+	expectedFields NetconfFieldsMap,
+) {
+	validateAfterAdd(t, interfaceName, expectedFields)
 
 	// Check that there's no route to go to IMDS endpoint.
 	for _, ep := range vpc.InstanceMetadataEndpoints {
@@ -245,13 +237,14 @@ func validateAfterAddBlockIMDS(t *testing.T) {
 	}
 }
 
-func validateAfterAddCommon(
+func validateAfterAdd(
 	t *testing.T,
 	interfaceName string,
 	expectedFields NetconfFieldsMap,
 ) {
-	// When the branch link is just brought up and brought down by another test, there will be some
-	// delay before the same branch link is up again, even though the plugin brings it up.
+	// Give some time for the link to come up, we just initialized it, if this time is
+	// too short, the link status will be `unknown` instead of `up` even though
+	// everything is actually set up properly.
 	time.Sleep(2 * time.Second)
 
 	// Check that branch link exists and is up.
@@ -274,9 +267,13 @@ func validateAfterAddCommon(
 	validateDefaultRoute(t, branch, netlink.FAMILY_V6, expectedFields.GatewayIPv6Address)
 }
 
-func validateAfterDel(t *testing.T) {
+func validateAfterDel(
+	t *testing.T,
+	interfaceName string,
+	expectedFields NetconfFieldsMap,
+) {
 	// Check branch link is deleted.
-	_, err := netlink.LinkByName(ifName)
+	_, err := netlink.LinkByName(interfaceName)
 	assert.Error(t, err)
 }
 
