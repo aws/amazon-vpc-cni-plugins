@@ -21,6 +21,12 @@ jobs:
         run: |
           ip link show
           sudo ip link add eth1 type dummy
+          sudo ip link set dev eth1 mtu 9001
+          sudo ip link set dev eth1 up
+          ip link show
+          sudo ip link add eth2 type dummy
+          sudo ip link set dev eth2 mtu 9001
+          sudo ip link set dev eth2 up
           ip link show
       - name: test
         run: make e2e-test
