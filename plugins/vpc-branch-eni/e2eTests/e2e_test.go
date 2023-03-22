@@ -17,12 +17,14 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
 	"os"
 	"strconv"
 	"testing"
+	"text/template"
 	"time"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
@@ -33,65 +35,77 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
+type NetconfFieldsMap struct {
+	Trunk              string
+	BranchVlanID       uint16
+	BranchMACAddress   string
+	BranchIPv4Address  string
+	BranchIPv6Address  string
+	GatewayIPv4Address string
+	GatewayIPv6Address string
+	BlockIMDS          bool
+}
+
+func netconfFields() NetconfFieldsMap {
+	return NetconfFieldsMap{
+		Trunk:              "eth1",
+		BranchVlanID:       101,
+		BranchMACAddress:   "02:e1:48:75:86:a4",
+		BranchIPv4Address:  "172.31.19.6/20",
+		BranchIPv6Address:  "2600:1f13:4d9:e602:6aea:cdb1:2b2b:8d62/64",
+		GatewayIPv4Address: "172.31.16.1",
+		GatewayIPv6Address: "2600:1f13:4d9:e602::1234",
+		BlockIMDS:          false,
+	}
+}
+
+func netconfFieldsBlockIMDS() NetconfFieldsMap {
+	return NetconfFieldsMap{
+		Trunk:              "eth2",
+		BranchVlanID:       102,
+		BranchMACAddress:   "02:e1:48:75:88:a4",
+		BranchIPv4Address:  "172.32.19.6/20",
+		BranchIPv6Address:  "2600:1f13:4d9:e604:6aea:cdb1:2b2b:8d62/64",
+		GatewayIPv4Address: "172.32.16.1",
+		GatewayIPv6Address: "2600:1f13:4d9:e604::1234",
+		BlockIMDS:          true,
+	}
+}
+
 const (
-	trunkName          = "eth1"
-	containerID        = "container_1"
-	ifName             = "testIf"
-	nsName             = "vpcBranchEniTestNS"
-	branchMACAddress   = "02:e1:48:75:86:a4"
-	branchIPv4Address  = "172.31.19.6/20"
-	branchIPv6Address  = "2600:1f13:4d9:e602:6aea:cdb1:2b2b:8d62/64"
-	gatewayIPv4Address = "172.31.16.1"
-	gatewayIPv6Address = "2600:1f13:4d9:e602::1234"
-	netConfJsonFmt     = `
+	containerID = "container_1"
+
+	// template
+	netConfJsonFmt = `
 {
 	"type": "vpc-branch-eni",
 	"name": "vpc-branch-eni-test-network",
 	"cniVersion":"0.3.0",
-	"trunkName": "%s",
-	"branchVlanID": "101",
-	"branchMACAddress": "%s",
-	"ipAddresses": ["%s","%s"],
-	"gatewayIPAddresses": ["%s","%s"],
+	"trunkName": "{{.Trunk}}",
+	"branchVlanID": "{{.BranchVlanID}}",
+	"branchMACAddress": "{{.BranchMACAddress}}",
+	"ipAddresses": ["{{.BranchIPv4Address}}","{{.BranchIPv6Address}}"],
+	"gatewayIPAddresses": ["{{.GatewayIPv4Address}}","{{.GatewayIPv6Address}}"],
+	"blockInstanceMetadata": {{.BlockIMDS}},
 	"interfaceType": "vlan"
 }
 `
-	trunkNameBlockIMDS          = "eth2"
-	ifNameBlockIMDS             = "blockImdsTestIf"
-	nsNameBlockIMDS             = "vpcBranchEniBlockImdsTestNS"
-	branchMACAddressBlockIMDS   = "02:e1:48:75:86:a4"
-	branchIPv4AddressBlockIMDS  = "172.32.19.6/20"
-	branchIPv6AddressBlockIMDS  = "2600:1f13:4d9:e604:6aea:cdb1:2b2b:8d62/64"
-	gatewayIPv4AddressBlockIMDS = "172.32.16.1"
-	gatewayIPv6AddressBlockIMDS = "2600:1f13:4d9:e604::1234"
-	netConfJsonFmtBlockIMDS     = `
-{
-	"type": "vpc-branch-eni",
-	"name": "vpc-branch-eni-test-network",
-	"cniVersion":"0.3.0",
-	"trunkName": "%s",
-	"branchVlanID": "102",
-	"branchMACAddress": "%s",
-	"ipAddresses": ["%s","%s"],
-	"gatewayIPAddresses": ["%s","%s"],
-	"interfaceType": "vlan",
-	"blockInstanceMetadata": true
-}
-`
+
+	// constants for TestAddDel
+	ifName = "testIf"
+	nsName = "vpcBranchEniTestNS"
+
+	// constants for TestAddDelBlockIMDS
+	ifNameBlockIMDS = "blockImdsTestIf"
+	nsNameBlockIMDS = "vpcBranchEniBlockImdsTestNS"
 )
 
 func TestAddDelBlockIMDS(t *testing.T) {
 	testAddDel(
 		t,
-		netConfJsonFmtBlockIMDS,
-		trunkNameBlockIMDS,
+		netconfFieldsBlockIMDS(),
 		nsNameBlockIMDS,
 		ifNameBlockIMDS,
-		branchMACAddressBlockIMDS,
-		branchIPv4AddressBlockIMDS,
-		branchIPv6AddressBlockIMDS,
-		gatewayIPv4AddressBlockIMDS,
-		gatewayIPv6AddressBlockIMDS,
 		validateAfterAddBlockIMDS,
 		validateAfterDel,
 	)
@@ -103,22 +117,16 @@ func TestAddDel(t *testing.T) {
 	// Bring down the trunk interface so that we can ensure the plugin is not assuming the trunk interface
 	// is already brought up.
 	la := netlink.NewLinkAttrs()
-	la.Name = trunkName
+	la.Name = netconfFields().Trunk
 	link := &netlink.Dummy{LinkAttrs: la}
 	err = netlink.LinkSetDown(link)
 	require.NoError(t, err)
 
 	testAddDel(
 		t,
-		netConfJsonFmt,
-		trunkName,
+		netconfFields(),
 		nsName,
 		ifName,
-		branchMACAddress,
-		branchIPv4Address,
-		branchIPv6Address,
-		gatewayIPv4Address,
-		gatewayIPv6Address,
 		validateAfterAdd,
 		validateAfterDel,
 	)
@@ -126,15 +134,9 @@ func TestAddDel(t *testing.T) {
 
 func testAddDel(
 	t *testing.T,
-	inputNetConfJsonFmt string,
-	trunkLinkName string,
+	inputNetconfFields NetconfFieldsMap,
 	netNsName string,
 	interfaceName string,
-	branchMAC string,
-	branchIPv4 string,
-	branchIPv6 string,
-	gatewayIPv4 string,
-	gatewayIPv6 string,
 	validateAfterAddFunc,
 	validateAfterDelFunc func(*testing.T),
 ) {
@@ -183,16 +185,11 @@ func testAddDel(
 		Path:        os.Getenv("CNI_PATH"),
 	}
 
-	netConfJson := fmt.Sprintf(
-		inputNetConfJsonFmt,
-		trunkLinkName,
-		branchMAC,
-		branchIPv4,
-		branchIPv6,
-		gatewayIPv4,
-		gatewayIPv6,
-	)
-	netConf := []byte(netConfJson)
+	var netConfBytes bytes.Buffer
+	netConfJsonTpl := template.Must(template.New("testAddDel").Parse(netConfJsonFmt))
+	tplExecErr := netConfJsonTpl.Execute(&netConfBytes, inputNetconfFields)
+	require.NoErrorf(t, tplExecErr, "Unable to fill in the netconf template using %+v", inputNetconfFields)
+	netConf := netConfBytes.Bytes()
 
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
@@ -229,11 +226,7 @@ func validateAfterAdd(t *testing.T) {
 	validateAfterAddCommon(
 		t,
 		ifName,
-		branchMACAddress,
-		branchIPv4Address,
-		branchIPv6Address,
-		gatewayIPv4Address,
-		gatewayIPv6Address,
+		netconfFields(),
 	)
 }
 
@@ -241,11 +234,7 @@ func validateAfterAddBlockIMDS(t *testing.T) {
 	validateAfterAddCommon(
 		t,
 		ifNameBlockIMDS,
-		branchMACAddressBlockIMDS,
-		branchIPv4AddressBlockIMDS,
-		branchIPv6AddressBlockIMDS,
-		gatewayIPv4AddressBlockIMDS,
-		gatewayIPv6AddressBlockIMDS,
+		netconfFieldsBlockIMDS(),
 	)
 
 	// Check that there's no route to go to IMDS endpoint.
@@ -259,11 +248,7 @@ func validateAfterAddBlockIMDS(t *testing.T) {
 func validateAfterAddCommon(
 	t *testing.T,
 	interfaceName string,
-	expectedMAC string,
-	expectedIPv4 string,
-	expectedIPv6 string,
-	expectedGatewayIPv4 string,
-	expectedGatewayIPv6 string,
+	expectedFields NetconfFieldsMap,
 ) {
 	// When the branch link is just brought up and brought down by another test, there will be some
 	// delay before the same branch link is up again, even though the plugin brings it up.
@@ -276,18 +261,17 @@ func validateAfterAddCommon(
 	assert.Equal(t, "vlan", branch.Type())
 
 	branchAttrs := branch.Attrs()
-	t.Logf("branchAttrs: %+v", branchAttrs)
 	assert.NotNil(t, branch.Attrs())
 	assert.Equal(t, "up", branchAttrs.OperState.String())
-	assert.Equal(t, expectedMAC, branchAttrs.HardwareAddr.String())
+	assert.Equal(t, expectedFields.BranchMACAddress, branchAttrs.HardwareAddr.String())
 
 	// Check IP addresses.
-	validateIPAddress(t, branch, netlink.FAMILY_V4, expectedIPv4)
-	validateIPAddress(t, branch, netlink.FAMILY_V6, expectedIPv6)
+	validateIPAddress(t, branch, netlink.FAMILY_V4, expectedFields.BranchIPv4Address)
+	validateIPAddress(t, branch, netlink.FAMILY_V6, expectedFields.BranchIPv6Address)
 
 	// Check default routes.
-	validateDefaultRoute(t, branch, netlink.FAMILY_V4, expectedGatewayIPv4)
-	validateDefaultRoute(t, branch, netlink.FAMILY_V6, expectedGatewayIPv6)
+	validateDefaultRoute(t, branch, netlink.FAMILY_V4, expectedFields.GatewayIPv4Address)
+	validateDefaultRoute(t, branch, netlink.FAMILY_V6, expectedFields.GatewayIPv6Address)
 }
 
 func validateAfterDel(t *testing.T) {
