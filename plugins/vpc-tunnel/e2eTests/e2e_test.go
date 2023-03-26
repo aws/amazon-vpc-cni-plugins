@@ -17,8 +17,8 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
@@ -35,7 +35,7 @@ import (
 
 const (
 	containerID        = "container_1"
-	nsName             = "testNS"
+	nsName             = "vpcTunnelTestNS"
 	vni                = "CB0CF5"
 	geneveIPv4Address  = "169.254.0.1/31"
 	gatewayIPv4Address = "169.254.0.0"
@@ -46,6 +46,7 @@ const (
 	netConfJsonFmt     = `
 {
 	"type": "vpc-tunnel",
+	"name": "vpc-tunnel-e2e-testnet",
 	"cniVersion":"0.3.0",
 	"destinationIPAddress": "%s",
 	"vni": "%s",
@@ -80,7 +81,8 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 	require.NoError(t, err, "Unable to find vpc-tunnel plugin in path")
 
 	// Create a directory for storing test logs.
-	testLogDir, err := ioutil.TempDir("", "vpc-tunnel-cni-e2eTests-test-")
+	testLogDir, err := os.MkdirTemp("", "vpc-tunnel-cni-e2eTests-test-")
+	err = os.Chmod(testLogDir, 0755)
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	// Configure the env var to use the test logs directory.
@@ -126,9 +128,11 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
 	err = invoke.ExecPluginWithoutResult(
+		context.Background(),
 		pluginPath,
 		netConf,
-		execInvokeArgs)
+		execInvokeArgs,
+		nil)
 	require.NoError(t, err, "Unable to execute ADD command for vpc-tunnel cni plugin")
 
 	targetNS.Run(func() error {
@@ -139,9 +143,11 @@ func testAddDel(t *testing.T, netConfJsonFmt string, validateAfterAddFunc, valid
 	// Execute the "DEL" command for the plugin.
 	execInvokeArgs.Command = "DEL"
 	err = invoke.ExecPluginWithoutResult(
+		context.Background(),
 		pluginPath,
 		netConf,
-		execInvokeArgs)
+		execInvokeArgs,
+		nil)
 	require.NoError(t, err, "Unable to execute DEL command for vpc-tunnel cni plugin")
 
 	targetNS.Run(func() error {

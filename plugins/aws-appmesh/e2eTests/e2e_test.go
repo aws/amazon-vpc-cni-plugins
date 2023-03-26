@@ -19,7 +19,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -52,7 +51,7 @@ const (
 	egressIgnoredIPv6Addresses = "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
 	containerID                = "contain-er"
 	ifName                     = "test"
-	nsName                     = "testNS"
+	nsName                     = "awsAppmeshTestNS"
 )
 
 type testMeta struct {
@@ -117,7 +116,8 @@ func initTest(t *testing.T) {
 	require.NoError(t, err, "Unable to find aws-appmesh plugin in path")
 
 	// Create a directory for storing test logs.
-	testLogDir, err := ioutil.TempDir("", "aws-appmesh-cni-e2eTests-test-")
+	testLogDir, err := os.MkdirTemp("", "aws-appmesh-cni-e2eTests-test-")
+	err = os.Chmod(testLogDir, 0755)
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	// Configure the env var to use the test logs directory.
@@ -240,7 +240,7 @@ func testValid(t *testing.T, meta testMeta) {
 // loadTestData loads test cases in json form.
 func loadTestData(t *testing.T, name string) []byte {
 	path := filepath.Join("testdata", name+".json")
-	bytes, err := ioutil.ReadFile(path)
+	bytes, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
