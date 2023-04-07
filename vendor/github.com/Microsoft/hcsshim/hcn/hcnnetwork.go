@@ -2,27 +2,28 @@ package hcn
 
 import (
 	"encoding/json"
+	"errors"
 
-	"github.com/Microsoft/hcsshim/internal/guid"
+	"github.com/Microsoft/go-winio/pkg/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/sirupsen/logrus"
 )
 
-// Route is assoicated with a subnet.
+// Route is associated with a subnet.
 type Route struct {
 	NextHop           string `json:",omitempty"`
 	DestinationPrefix string `json:",omitempty"`
 	Metric            uint16 `json:",omitempty"`
 }
 
-// Subnet is assoicated with a Ipam.
+// Subnet is associated with a Ipam.
 type Subnet struct {
 	IpAddressPrefix string            `json:",omitempty"`
 	Policies        []json.RawMessage `json:",omitempty"`
 	Routes          []Route           `json:",omitempty"`
 }
 
-// Ipam (Internet Protocol Addres Management) is assoicated with a network
+// Ipam (Internet Protocol Address Management) is associated with a network
 // and represents the address space(s) of a network.
 type Ipam struct {
 	Type    string   `json:",omitempty"` // Ex: Static, DHCP
@@ -35,14 +36,14 @@ type MacRange struct {
 	EndMacAddress   string `json:",omitempty"`
 }
 
-// MacPool is assoicated with a network and represents pool of MacRanges.
+// MacPool is associated with a network and represents pool of MacRanges.
 type MacPool struct {
 	Ranges []MacRange `json:",omitempty"`
 }
 
-// Dns (Domain Name System is associated with a network.
+// Dns (Domain Name System is associated with a network).
 type Dns struct {
-	Suffix     string   `json:",omitempty"`
+	Domain     string   `json:",omitempty"`
 	Search     []string `json:",omitempty"`
 	ServerList []string `json:",omitempty"`
 	Options    []string `json:",omitempty"`
@@ -62,6 +63,15 @@ const (
 	Overlay     NetworkType = "Overlay"
 )
 
+// NetworkFlags are various network flags.
+type NetworkFlags uint32
+
+// NetworkFlags const
+const (
+	None                NetworkFlags = 0
+	EnableNonPersistent NetworkFlags = 8
+)
+
 // HostComputeNetwork represents a network
 type HostComputeNetwork struct {
 	Id            string          `json:"ID,omitempty"`
@@ -71,8 +81,33 @@ type HostComputeNetwork struct {
 	MacPool       MacPool         `json:",omitempty"`
 	Dns           Dns             `json:",omitempty"`
 	Ipams         []Ipam          `json:",omitempty"`
-	Flags         uint32          `json:",omitempty"` // 0: None
+	Flags         NetworkFlags    `json:",omitempty"` // 0: None
+	Health        Health          `json:",omitempty"`
 	SchemaVersion SchemaVersion   `json:",omitempty"`
+}
+
+// NetworkResourceType are the 3 different Network settings resources.
+type NetworkResourceType string
+
+var (
+	// NetworkResourceTypePolicy is for Network's policies. Ex: RemoteSubnet
+	NetworkResourceTypePolicy NetworkResourceType = "Policy"
+	// NetworkResourceTypeDNS is for Network's DNS settings.
+	NetworkResourceTypeDNS NetworkResourceType = "DNS"
+	// NetworkResourceTypeExtension is for Network's extension settings.
+	NetworkResourceTypeExtension NetworkResourceType = "Extension"
+)
+
+// ModifyNetworkSettingRequest is the structure used to send request to modify an network.
+// Used to update DNS/extension/policy on an network.
+type ModifyNetworkSettingRequest struct {
+	ResourceType NetworkResourceType `json:",omitempty"` // Policy, DNS, Extension
+	RequestType  RequestType         `json:",omitempty"` // Add, Remove, Update, Refresh
+	Settings     json.RawMessage     `json:",omitempty"`
+}
+
+type PolicyNetworkRequest struct {
+	Policies []NetworkPolicy `json:",omitempty"`
 }
 
 func getNetwork(networkGuid guid.GUID, query string) (*HostComputeNetwork, error) {
@@ -99,6 +134,12 @@ func getNetwork(networkGuid guid.GUID, query string) (*HostComputeNetwork, error
 	}
 	// Convert output to HostComputeNetwork
 	var outputNetwork HostComputeNetwork
+
+	// If HNS sets the network type to NAT (i.e. '0' in HNS.Schema.Network.NetworkMode),
+	// the value will be omitted from the JSON blob. We therefore need to initialize NAT here before
+	// unmarshaling the JSON blob.
+	outputNetwork.Type = NAT
+
 	if err := json.Unmarshal([]byte(properties), &outputNetwork); err != nil {
 		return nil, err
 	}
@@ -163,6 +204,12 @@ func createNetwork(settings string) (*HostComputeNetwork, error) {
 	}
 	// Convert output to HostComputeNetwork
 	var outputNetwork HostComputeNetwork
+
+	// If HNS sets the network type to NAT (i.e. '0' in HNS.Schema.Network.NetworkMode),
+	// the value will be omitted from the JSON blob. We therefore need to initialize NAT here before
+	// unmarshaling the JSON blob.
+	outputNetwork.Type = NAT
+
 	if err := json.Unmarshal([]byte(properties), &outputNetwork); err != nil {
 		return nil, err
 	}
@@ -170,7 +217,10 @@ func createNetwork(settings string) (*HostComputeNetwork, error) {
 }
 
 func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, error) {
-	networkGuid := guid.FromString(networkId)
+	networkGuid, err := guid.FromString(networkId)
+	if err != nil {
+		return nil, errInvalidNetworkID
+	}
 	// Open Network
 	var (
 		networkHandle    hcnNetwork
@@ -204,6 +254,12 @@ func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, erro
 	}
 	// Convert output to HostComputeNetwork
 	var outputNetwork HostComputeNetwork
+
+	// If HNS sets the network type to NAT (i.e. '0' in HNS.Schema.Network.NetworkMode),
+	// the value will be omitted from the JSON blob. We therefore need to initialize NAT here before
+	// unmarshaling the JSON blob.
+	outputNetwork.Type = NAT
+
 	if err := json.Unmarshal([]byte(properties), &outputNetwork); err != nil {
 		return nil, err
 	}
@@ -211,7 +267,10 @@ func modifyNetwork(networkId string, settings string) (*HostComputeNetwork, erro
 }
 
 func deleteNetwork(networkId string) error {
-	networkGuid := guid.FromString(networkId)
+	networkGuid, err := guid.FromString(networkId)
+	if err != nil {
+		return errInvalidNetworkID
+	}
 	var resultBuffer *uint16
 	hr := hcnDeleteNetwork(&networkGuid, &resultBuffer)
 	if err := checkForErrors("hcnDeleteNetwork", hr, resultBuffer); err != nil {
@@ -287,12 +346,31 @@ func GetNetworkByName(networkName string) (*HostComputeNetwork, error) {
 // Create Network.
 func (network *HostComputeNetwork) Create() (*HostComputeNetwork, error) {
 	logrus.Debugf("hcn::HostComputeNetwork::Create id=%s", network.Id)
+	for _, ipam := range network.Ipams {
+		for _, subnet := range ipam.Subnets {
+			if subnet.IpAddressPrefix != "" {
+				hasDefault := false
+				for _, route := range subnet.Routes {
+					if route.NextHop == "" {
+						return nil, errors.New("network create error, subnet has address prefix but no gateway specified")
+					}
+					if route.DestinationPrefix == "0.0.0.0/0" || route.DestinationPrefix == "::/0" {
+						hasDefault = true
+					}
+				}
+				if !hasDefault {
+					return nil, errors.New("network create error, no default gateway")
+				}
+			}
+		}
+	}
 
 	jsonString, err := json.Marshal(network)
 	if err != nil {
 		return nil, err
 	}
 
+	logrus.Debugf("hcn::HostComputeNetwork::Create JSON: %s", jsonString)
 	network, hcnErr := createNetwork(string(jsonString))
 	if hcnErr != nil {
 		return nil, hcnErr
@@ -301,13 +379,63 @@ func (network *HostComputeNetwork) Create() (*HostComputeNetwork, error) {
 }
 
 // Delete Network.
-func (network *HostComputeNetwork) Delete() (*HostComputeNetwork, error) {
+func (network *HostComputeNetwork) Delete() error {
 	logrus.Debugf("hcn::HostComputeNetwork::Delete id=%s", network.Id)
 
 	if err := deleteNetwork(network.Id); err != nil {
-		return nil, err
+		return err
 	}
-	return nil, nil
+	return nil
+}
+
+// ModifyNetworkSettings updates the Policy for a network.
+func (network *HostComputeNetwork) ModifyNetworkSettings(request *ModifyNetworkSettingRequest) error {
+	logrus.Debugf("hcn::HostComputeNetwork::ModifyNetworkSettings id=%s", network.Id)
+
+	networkSettingsRequest, err := json.Marshal(request)
+	if err != nil {
+		return err
+	}
+
+	_, err = modifyNetwork(network.Id, string(networkSettingsRequest))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// AddPolicy applies a Policy (ex: RemoteSubnet) on the Network.
+func (network *HostComputeNetwork) AddPolicy(networkPolicy PolicyNetworkRequest) error {
+	logrus.Debugf("hcn::HostComputeNetwork::AddPolicy id=%s", network.Id)
+
+	settingsJson, err := json.Marshal(networkPolicy)
+	if err != nil {
+		return err
+	}
+	requestMessage := &ModifyNetworkSettingRequest{
+		ResourceType: NetworkResourceTypePolicy,
+		RequestType:  RequestTypeAdd,
+		Settings:     settingsJson,
+	}
+
+	return network.ModifyNetworkSettings(requestMessage)
+}
+
+// RemovePolicy removes a Policy (ex: RemoteSubnet) from the Network.
+func (network *HostComputeNetwork) RemovePolicy(networkPolicy PolicyNetworkRequest) error {
+	logrus.Debugf("hcn::HostComputeNetwork::RemovePolicy id=%s", network.Id)
+
+	settingsJson, err := json.Marshal(networkPolicy)
+	if err != nil {
+		return err
+	}
+	requestMessage := &ModifyNetworkSettingRequest{
+		ResourceType: NetworkResourceTypePolicy,
+		RequestType:  RequestTypeRemove,
+		Settings:     settingsJson,
+	}
+
+	return network.ModifyNetworkSettings(requestMessage)
 }
 
 // CreateEndpoint creates an endpoint on the Network.
