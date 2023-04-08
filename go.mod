@@ -9,7 +9,7 @@ require (
 	github.com/coreos/go-iptables v0.6.0
 	github.com/stretchr/testify v1.2.2
 	github.com/vishvananda/netlink v1.1.1-0.20210316144550-c21bda41e995
-	golang.org/x/sys v0.0.0-20200728102440-3e129f6d46b1
+	golang.org/x/sys v0.1.0
 )
 
 require (
