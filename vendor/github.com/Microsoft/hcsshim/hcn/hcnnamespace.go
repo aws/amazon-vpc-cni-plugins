@@ -5,8 +5,8 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/Microsoft/go-winio/pkg/guid"
 	icni "github.com/Microsoft/hcsshim/internal/cni"
-	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/interop"
 	"github.com/Microsoft/hcsshim/internal/regstate"
 	"github.com/Microsoft/hcsshim/internal/runhcs"
@@ -165,7 +165,10 @@ func createNamespace(settings string) (*HostComputeNamespace, error) {
 }
 
 func modifyNamespace(namespaceId string, settings string) (*HostComputeNamespace, error) {
-	namespaceGuid := guid.FromString(namespaceId)
+	namespaceGuid, err := guid.FromString(namespaceId)
+	if err != nil {
+		return nil, errInvalidNamespaceID
+	}
 	// Open namespace.
 	var (
 		namespaceHandle  hcnNamespace
@@ -206,7 +209,10 @@ func modifyNamespace(namespaceId string, settings string) (*HostComputeNamespace
 }
 
 func deleteNamespace(namespaceId string) error {
-	namespaceGuid := guid.FromString(namespaceId)
+	namespaceGuid, err := guid.FromString(namespaceId)
+	if err != nil {
+		return errInvalidNamespaceID
+	}
 	var resultBuffer *uint16
 	hr := hcnDeleteNamespace(&namespaceGuid, &resultBuffer)
 	if err := checkForErrors("hcnDeleteNamespace", hr, resultBuffer); err != nil {
@@ -241,7 +247,23 @@ func ListNamespacesQuery(query HostComputeQuery) ([]HostComputeNamespace, error)
 
 // GetNamespaceByID returns the Namespace specified by Id.
 func GetNamespaceByID(namespaceId string) (*HostComputeNamespace, error) {
-	return getNamespace(guid.FromString(namespaceId), defaultQueryJson())
+	hcnQuery := defaultQuery()
+	mapA := map[string]string{"ID": namespaceId}
+	filter, err := json.Marshal(mapA)
+	if err != nil {
+		return nil, err
+	}
+	hcnQuery.Filter = string(filter)
+
+	namespaces, err := ListNamespacesQuery(hcnQuery)
+	if err != nil {
+		return nil, err
+	}
+	if len(namespaces) == 0 {
+		return nil, NamespaceNotFoundError{NamespaceID: namespaceId}
+	}
+
+	return &namespaces[0], err
 }
 
 // GetNamespaceEndpointIds returns the endpoints of the Namespace specified by Id.
@@ -299,6 +321,7 @@ func (namespace *HostComputeNamespace) Create() (*HostComputeNamespace, error) {
 		return nil, err
 	}
 
+	logrus.Debugf("hcn::HostComputeNamespace::Create JSON: %s", jsonString)
 	namespace, hcnErr := createNamespace(string(jsonString))
 	if hcnErr != nil {
 		return nil, hcnErr
@@ -307,13 +330,13 @@ func (namespace *HostComputeNamespace) Create() (*HostComputeNamespace, error) {
 }
 
 // Delete Namespace.
-func (namespace *HostComputeNamespace) Delete() (*HostComputeNamespace, error) {
+func (namespace *HostComputeNamespace) Delete() error {
 	logrus.Debugf("hcn::HostComputeNamespace::Delete id=%s", namespace.Id)
 
 	if err := deleteNamespace(namespace.Id); err != nil {
-		return nil, err
+		return err
 	}
-	return nil, nil
+	return nil
 }
 
 // Sync Namespace endpoints with the appropriate sandbox container holding the
@@ -355,7 +378,7 @@ func (namespace *HostComputeNamespace) Sync() error {
 		// The shim is likey gone. Simply ignore the sync as if it didn't exist.
 		if perr, ok := err.(*os.PathError); ok && perr.Err == syscall.ERROR_FILE_NOT_FOUND {
 			// Remove the reg key there is no point to try again
-			cfg.Remove()
+			_ = cfg.Remove()
 			return nil
 		}
 		f := map[string]interface{}{
