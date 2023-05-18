@@ -19,6 +19,13 @@ import (
 	"strings"
 )
 
+// PortMapping contains the container port to host port mapping information.
+type PortMapping struct {
+	Protocol      string `json:"protocol"`
+	HostPort      int    `json:"hostPort"`
+	ContainerPort int    `json:"containerPort"`
+}
+
 // ValidatePort checks whether the port only has digits and is within valid port range.
 func ValidatePort(p string) error {
 	port := strings.TrimSpace(p)
