@@ -27,6 +27,12 @@ import (
 )
 
 const (
+	// hcnSchemaVersionMajor indicates major version number for HCN schema.
+	hcnSchemaMajorVersion = 2
+
+	// hcnSchemaVersionMinor indicates minor version number for HCN schema.
+	hcnSchemaMinorVersion = 0
+
 	// hnsL2Bridge is the HNS network type used by this plugin on Windows.
 	hnsL2Bridge = "l2bridge"
 
@@ -35,6 +41,9 @@ const (
 
 	// hnsEndpointNameFormat is the format of the names generated for HNS endpoints.
 	hnsEndpointNameFormat = "cid-%s"
+
+	// defaultRoute is the default route in the route table.
+	defaultRoute = "0.0.0.0/0"
 )
 
 // nsType identifies the namespace type for the containers.
@@ -54,14 +63,6 @@ var (
 	hnsMinVersion = hcsshim.HNSVersion1803
 )
 
-// hnsRoutePolicy is an HNS route policy.
-// This definition really needs to be in Microsoft's hcsshim package.
-type hnsRoutePolicy struct {
-	hcsshim.Policy
-	DestinationPrefix string `json:"DestinationPrefix,omitempty"`
-	NeedEncap         bool   `json:"NeedEncap,omitempty"`
-}
-
 // BridgeBuilder implements NetworkBuilder interface by bridging containers to an ENI on Windows.
 type BridgeBuilder struct{}
 
@@ -75,47 +76,64 @@ func (nb *BridgeBuilder) FindOrCreateNetwork(nw *Network) error {
 
 	// HNS API does not support creating virtual switches in compartments other than the host's.
 	if nw.BridgeNetNSPath != "" {
-		return fmt.Errorf("Bridge must be in host network namespace on Windows")
+		return fmt.Errorf("bridge must be in host network namespace on Windows")
 	}
 
 	// Check if the network already exists.
 	networkName := nb.generateHNSNetworkName(nw)
-	hnsNetwork, err := hcsshim.GetHNSNetworkByName(networkName)
+	hnsNetwork, err := hcn.GetNetworkByName(networkName)
 	if err == nil {
 		log.Infof("Found existing HNS network %s.", networkName)
+		nw.NetworkID = hnsNetwork.Id
 		return nil
 	}
 
 	// Initialize the HNS network.
-	hnsNetwork = &hcsshim.HNSNetwork{
-		Name:               networkName,
-		Type:               hnsL2Bridge,
-		NetworkAdapterName: nw.SharedENI.GetLinkName(),
-
-		Subnets: []hcsshim.Subnet{
+	hnsNetwork = &hcn.HostComputeNetwork{
+		Name: networkName,
+		Type: hnsL2Bridge,
+		Ipams: []hcn.Ipam{
 			{
-				AddressPrefix:  vpc.GetSubnetPrefix(&nw.ENIIPAddresses[0]).String(),
-				GatewayAddress: nw.GatewayIPAddress.String(),
+				Subnets: []hcn.Subnet{
+					{
+						IpAddressPrefix: vpc.GetSubnetPrefix(&nw.ENIIPAddresses[0]).String(),
+						Routes: []hcn.Route{
+							{
+								NextHop:           nw.GatewayIPAddress.String(),
+								DestinationPrefix: defaultRoute,
+							},
+						},
+					},
+				},
 			},
+		},
+		SchemaVersion: hcn.SchemaVersion{
+			Major: hcnSchemaMajorVersion,
+			Minor: hcnSchemaMinorVersion,
 		},
 	}
 
-	buf, err := json.Marshal(hnsNetwork)
+	// Create the network policy for the adapter to which the vSwitch binds.
+	err = nb.addNetworkPolicy(
+		hnsNetwork,
+		hcn.NetAdapterName,
+		hcn.NetAdapterNameNetworkPolicySetting{
+			NetworkAdapterName: nw.SharedENI.GetLinkName(),
+		})
 	if err != nil {
 		return err
 	}
-	hnsRequest := string(buf)
 
 	// Create the HNS network.
-	log.Infof("Creating HNS network: %+v", hnsRequest)
-	hnsResponse, err := hcsshim.HNSNetworkRequest("POST", "", hnsRequest)
+	log.Infof("Creating HNS network: %+v", hnsNetwork)
+	hnsResponse, err := hnsNetwork.Create()
 	if err != nil {
 		log.Errorf("Failed to create HNS network: %v.", err)
 		return err
 	}
+	log.Infof("Received HNS response: %+v.", hnsResponse)
 
-	log.Infof("Received HNS network response: %+v.", hnsResponse)
-
+	nw.NetworkID = hnsResponse.Id
 	return nil
 }
 
@@ -123,14 +141,14 @@ func (nb *BridgeBuilder) FindOrCreateNetwork(nw *Network) error {
 func (nb *BridgeBuilder) DeleteNetwork(nw *Network) error {
 	// Find the HNS network ID.
 	networkName := nb.generateHNSNetworkName(nw)
-	hnsNetwork, err := hcsshim.GetHNSNetworkByName(networkName)
+	hnsNetwork, err := hcn.GetNetworkByName(networkName)
 	if err != nil {
 		return err
 	}
 
 	// Delete the HNS network.
 	log.Infof("Deleting HNS network name: %s ID: %s", networkName, hnsNetwork.Id)
-	_, err = hcsshim.HNSNetworkRequest("DELETE", hnsNetwork.Id, "")
+	err = hnsNetwork.Delete()
 	if err != nil {
 		log.Errorf("Failed to delete HNS network: %v.", err)
 	}
@@ -150,7 +168,7 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 
 	// Check if the endpoint already exists.
 	endpointName := nb.generateHNSEndpointName(ep, namespaceIdentifier)
-	hnsEndpoint, err := hcsshim.GetHNSEndpointByName(endpointName)
+	hnsEndpoint, err := hcn.GetEndpointByName(endpointName)
 	if err == nil {
 		log.Infof("Found existing HNS endpoint %s.", endpointName)
 		if nsType == infraContainerNS || nsType == hcnNamespace {
@@ -175,17 +193,28 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	}
 
 	// Initialize the HNS endpoint.
-	hnsEndpoint = &hcsshim.HNSEndpoint{
+	hnsEndpoint = &hcn.HostComputeEndpoint{
 		Name:               endpointName,
-		VirtualNetworkName: nb.generateHNSNetworkName(nw),
-		DNSSuffix:          strings.Join(nw.DNSSuffixSearchList, ","),
-		DNSServerList:      strings.Join(nw.DNSServers, ","),
+		HostComputeNetwork: nw.NetworkID,
+		IpConfigurations:   nil,
+		Dns: hcn.Dns{
+			Domain:     strings.Join(nw.DNSSuffixSearchList, ","),
+			ServerList: nw.DNSServers,
+		},
+		SchemaVersion: hcn.SchemaVersion{
+			Major: hcnSchemaMajorVersion,
+			Minor: hcnSchemaMinorVersion,
+		},
 	}
 
 	// Set the endpoint IP address.
-	hnsEndpoint.IPAddress = ep.IPAddresses[0].IP
 	pl, _ := ep.IPAddresses[0].Mask.Size()
-	hnsEndpoint.PrefixLength = uint8(pl)
+	hnsEndpoint.IpConfigurations = []hcn.IpConfig{
+		{
+			IpAddress:    ep.IPAddresses[0].IP.String(),
+			PrefixLength: uint8(pl),
+		},
+	}
 
 	// SNAT endpoint traffic to ENI primary IP address...
 	var snatExceptions []string
@@ -205,8 +234,8 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 
 	err = nb.addEndpointPolicy(
 		hnsEndpoint,
-		hcsshim.OutboundNatPolicy{
-			Policy: hcsshim.Policy{Type: hcsshim.OutboundNat},
+		hcn.OutBoundNAT,
+		hcn.OutboundNatPolicySetting{
 			// Implicit VIP: nw.ENIIPAddresses[0].IP.String(),
 			Exceptions: snatExceptions,
 		})
@@ -222,8 +251,8 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 		// NextHop is implicitly the host.
 		err = nb.addEndpointPolicy(
 			hnsEndpoint,
-			hnsRoutePolicy{
-				Policy:            hcsshim.Policy{Type: hcsshim.Route},
+			hcn.SDNRoute,
+			hcn.SDNRoutePolicySetting{
 				DestinationPrefix: nw.ServiceCIDR,
 				NeedEncap:         true,
 			})
@@ -235,8 +264,8 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 		// Set route policy for host primary IP address.
 		err = nb.addEndpointPolicy(
 			hnsEndpoint,
-			hnsRoutePolicy{
-				Policy:            hcsshim.Policy{Type: hcsshim.Route},
+			hcn.SDNRoute,
+			hcn.SDNRoutePolicySetting{
 				DestinationPrefix: nw.ENIIPAddresses[0].IP.String() + "/32",
 				NeedEncap:         true,
 			})
@@ -246,16 +275,9 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 		}
 	}
 
-	// Encode the endpoint request.
-	buf, err := json.Marshal(hnsEndpoint)
-	if err != nil {
-		return err
-	}
-	hnsRequest := string(buf)
-
 	// Create the HNS endpoint.
-	log.Infof("Creating HNS endpoint: %+v", hnsRequest)
-	hnsResponse, err := hcsshim.HNSEndpointRequest("POST", "", hnsRequest)
+	log.Infof("Creating HNS endpoint: %+v", hnsEndpoint)
+	hnsResponse, err := hnsEndpoint.Create()
 	if err != nil {
 		log.Errorf("Failed to create HNS endpoint: %v.", err)
 		return err
@@ -273,7 +295,7 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	if err != nil {
 		// Cleanup the failed endpoint.
 		log.Infof("Deleting the failed HNS endpoint %s.", hnsResponse.Id)
-		_, delErr := hcsshim.HNSEndpointRequest("DELETE", hnsResponse.Id, "")
+		delErr := hnsResponse.Delete()
 		if delErr != nil {
 			log.Errorf("Failed to delete HNS endpoint: %v.", delErr)
 		}
@@ -294,7 +316,7 @@ func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
 
 	// Find the HNS endpoint ID.
 	endpointName := nb.generateHNSEndpointName(ep, namespaceIdentifier)
-	hnsEndpoint, err := hcsshim.GetHNSEndpointByName(endpointName)
+	hnsEndpoint, err := hcn.GetEndpointByName(endpointName)
 	if err != nil {
 		return err
 	}
@@ -324,7 +346,7 @@ func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
 
 	// Delete the HNS endpoint.
 	log.Infof("Deleting HNS endpoint name: %s ID: %s", endpointName, hnsEndpoint.Id)
-	_, err = hcsshim.HNSEndpointRequest("DELETE", hnsEndpoint.Id, "")
+	err = hnsEndpoint.Delete()
 	if err != nil {
 		log.Errorf("Failed to delete HNS endpoint: %v.", err)
 	}
@@ -333,7 +355,7 @@ func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
 }
 
 // attachEndpointV1 attaches an HNS endpoint to a container's network namespace using HNS V1 APIs.
-func (nb *BridgeBuilder) attachEndpointV1(ep *hcsshim.HNSEndpoint, containerID string) error {
+func (nb *BridgeBuilder) attachEndpointV1(ep *hcn.HostComputeEndpoint, containerID string) error {
 	log.Infof("Attaching HNS endpoint %s to container %s.", ep.Id, containerID)
 	err := hcsshim.HotAttachEndpoint(containerID, ep.Id)
 	if err != nil {
@@ -346,7 +368,7 @@ func (nb *BridgeBuilder) attachEndpointV1(ep *hcsshim.HNSEndpoint, containerID s
 }
 
 // attachEndpointV2 attaches an HNS endpoint to a network namespace using HNS V2 APIs.
-func (nb *BridgeBuilder) attachEndpointV2(ep *hcsshim.HNSEndpoint, netNSName string) error {
+func (nb *BridgeBuilder) attachEndpointV2(ep *hcn.HostComputeEndpoint, netNSName string) error {
 	log.Infof("Adding HNS endpoint %s to ns %s.", ep.Id, netNSName)
 
 	// Check if endpoint is already in target namespace.
@@ -371,15 +393,45 @@ func (nb *BridgeBuilder) attachEndpointV2(ep *hcsshim.HNSEndpoint, netNSName str
 	return err
 }
 
-// addEndpointPolicy adds a policy to an HNS endpoint.
-func (nb *BridgeBuilder) addEndpointPolicy(ep *hcsshim.HNSEndpoint, policy interface{}) error {
-	buf, err := json.Marshal(policy)
+func (nb *BridgeBuilder) addNetworkPolicy(
+	nw *hcn.HostComputeNetwork,
+	policyType hcn.NetworkPolicyType,
+	policySettings interface{},
+) error {
+	policySettingsBytes, err := json.Marshal(policySettings)
 	if err != nil {
-		log.Errorf("Failed to encode policy: %v.", err)
-		return err
+		log.Errorf("Failed to encode network policy settings: %v.", err)
 	}
 
-	ep.Policies = append(ep.Policies, buf)
+	networkPolicy := hcn.NetworkPolicy{
+		Type:     policyType,
+		Settings: policySettingsBytes,
+	}
+
+	// Add the network policy to the existing policies.
+	nw.Policies = append(nw.Policies, networkPolicy)
+
+	return nil
+}
+
+// addEndpointPolicy adds a policy to an HNS endpoint.
+func (nb *BridgeBuilder) addEndpointPolicy(
+	ep *hcn.HostComputeEndpoint,
+	policyType hcn.EndpointPolicyType,
+	policySettings interface{},
+) error {
+	policySettingsBytes, err := json.Marshal(policySettings)
+	if err != nil {
+		log.Errorf("Failed to encode endpoint policy settings: %v.", err)
+	}
+
+	networkPolicy := hcn.EndpointPolicy{
+		Type:     policyType,
+		Settings: policySettingsBytes,
+	}
+
+	// Add the network policy to the existing policies.
+	ep.Policies = append(ep.Policies, networkPolicy)
 
 	return nil
 }
@@ -426,6 +478,12 @@ func (nb *BridgeBuilder) getNamespaceIdentifier(ep *Endpoint) (nsType, string) {
 
 // checkHNSVersion returns whether the Windows Host Networking Service version is supported.
 func (nb *BridgeBuilder) checkHNSVersion() error {
+	// Check if the V2 APIs are supported.
+	err := hcn.V2ApiSupported()
+	if err != nil {
+		return err
+	}
+
 	hnsGlobals, err := hcsshim.GetHNSGlobals()
 	if err != nil {
 		return err

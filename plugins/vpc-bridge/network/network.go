@@ -30,6 +30,7 @@ type Builder interface {
 // Network represents a container network.
 type Network struct {
 	Name                string
+	NetworkID           string
 	BridgeType          string
 	BridgeNetNSPath     string
 	BridgeIndex         int
