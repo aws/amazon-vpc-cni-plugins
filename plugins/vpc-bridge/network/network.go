@@ -17,6 +17,7 @@ import (
 	"net"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
+	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 )
 
 // Builder knows how to build container networks and connect container network interfaces.
@@ -30,6 +31,7 @@ type Builder interface {
 // Network represents a container network.
 type Network struct {
 	Name                string
+	NetworkID           string
 	BridgeType          string
 	BridgeNetNSPath     string
 	BridgeIndex         int
@@ -44,11 +46,12 @@ type Network struct {
 
 // Endpoint represents a container network interface.
 type Endpoint struct {
-	ContainerID string
-	NetNSName   string
-	IfName      string
-	IfType      string
-	TapUserID   int
-	MACAddress  net.HardwareAddr
-	IPAddresses []net.IPNet
+	ContainerID  string
+	NetNSName    string
+	IfName       string
+	IfType       string
+	TapUserID    int
+	MACAddress   net.HardwareAddr
+	IPAddresses  []net.IPNet
+	PortMappings []vpc.PortMapping
 }

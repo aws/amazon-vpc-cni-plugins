@@ -38,6 +38,7 @@ type NetConfig struct {
 	BridgeNetNSPath  string
 	IPAddresses      []net.IPNet
 	GatewayIPAddress net.IP
+	PortMappings     []vpc.PortMapping
 	InterfaceType    string
 	TapUserID        int
 	Kubernetes       *KubernetesConfig
@@ -46,6 +47,9 @@ type NetConfig struct {
 // netConfigJSON defines the network configuration JSON file format for the vpc-bridge plugin.
 type netConfigJSON struct {
 	cniTypes.NetConf
+	// Options to be passed in by the runtime
+	RuntimeConfig RuntimeConfig `json:"runtimeConfig"`
+	// Other explicit options
 	ENIName          string   `json:"eniName"`
 	ENIMACAddress    string   `json:"eniMACAddress"`
 	ENIIPAddresses   []string `json:"eniIPAddresses"`
@@ -57,6 +61,13 @@ type netConfigJSON struct {
 	InterfaceType    string   `json:"interfaceType"`
 	TapUserID        string   `json:"tapUserID"`
 	ServiceCIDR      string   `json:"serviceCIDR"`
+}
+
+// RuntimeConfig are the runtime options which will be populated dynamically by the runtime
+// based on the requested capability.
+// https://www.cni.dev/docs/conventions/#dynamic-plugin-specific-fields-capabilities--runtime-configuration
+type RuntimeConfig struct {
+	PortMappings []vpc.PortMapping `json:"portMappings,omitempty"`
 }
 
 const (
@@ -107,6 +118,7 @@ func New(args *cniSkel.CmdArgs, isAddCmd bool) (*NetConfig, error) {
 		BridgeType:      config.BridgeType,
 		BridgeNetNSPath: config.BridgeNetNSPath,
 		InterfaceType:   config.InterfaceType,
+		PortMappings:    config.RuntimeConfig.PortMappings,
 	}
 
 	// Parse the ENI MAC address.
