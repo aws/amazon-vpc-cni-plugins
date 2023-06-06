@@ -176,7 +176,7 @@ func (plugin *Plugin) setupEgressRules(
 		}
 	}
 
-	if len(config.EgressIgnoredPorts) > 0 && config.EgressIgnoredPorts[0] != "" {
+	if len(config.EgressIgnoredPorts) > 0 {
 		err = forEachSlice(config.EgressIgnoredPorts, multiportLimit, func(ports []string) error {
 			return iptable.Append("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports", strings.Join(ports, ","), "-j", "RETURN")
 		})
@@ -217,18 +217,13 @@ func (plugin *Plugin) setupEgressRules(
 func (plugin *Plugin) setupIngressRules(
 	iptable *iptables.IPTables,
 	config *config.NetConfig) error {
-	if config.ProxyIngressPort == "" {
+	if config.ProxyIngressPort == "" || len(config.AppPorts) == 0 {
 		return nil
 	}
 
 	err := iptable.NewChain("nat", ingressChain)
 	if err != nil {
 		return err
-	}
-
-	// When no app port specified, appPorts field is a string array of length 1 with an empty string element.
-	if len(config.AppPorts) > 0 && config.AppPorts[0] == "" {
-		return nil
 	}
 
 	// Route everything arriving at the application port to proxy.
@@ -279,12 +274,9 @@ func (plugin *Plugin) deleteIptablesRules(
 func (plugin *Plugin) deleteIngressRules(
 	iptable *iptables.IPTables,
 	config *config.NetConfig) error {
-	if config.ProxyIngressPort == "" {
-		return nil
-	}
 
 	// When no app port specified, appPorts field is a string array of length 1 with an empty string element.
-	if len(config.AppPorts) > 0 && config.AppPorts[0] == "" {
+	if len(config.AppPorts) == 0 {
 		return nil
 	}
 
@@ -372,7 +364,7 @@ func forEachSlice(inputPorts []string, maximumPort int, run func([]string) error
 
 		//There should not be empty string in port list here
 		if len(port) == 0 {
-			log.Warn("Found empty port in portlist.")
+			log.Warn("Found empty port in portlist, ignoring")
 			continue
 		}
 

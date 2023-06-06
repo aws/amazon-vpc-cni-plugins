@@ -72,7 +72,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	}
 
 	// Validate network configuration.
-	if err := validateConfig(config); err != nil {
+	if err := validateConfig(&config); err != nil {
 		return nil, err
 	}
 
@@ -123,7 +123,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 }
 
 // validateConfig validates network configuration.
-func validateConfig(config netConfigJSON) error {
+func validateConfig(config *netConfigJSON) error {
 	// Validate if all the required fields are present.
 	if config.IgnoredGID == "" && config.IgnoredUID == "" {
 		return fmt.Errorf("missing required parameter ignoredGID or ignoredUID")
@@ -140,6 +140,20 @@ func validateConfig(config netConfigJSON) error {
 
 	if config.ProxyIngressPort != "" && len(config.AppPorts) == 0 {
 		return fmt.Errorf("missing parameter appPorts (required if proxyIngressPort is provided)")
+	}
+
+	// For configs coming from appmesh controller, the IngressPort will always be set but the appPort can be empty string with single element
+	// We still treat that as valid and delete that empty element
+	if len(config.AppPorts) == 1 && config.AppPorts[0] == "" {
+		config.AppPorts = nil
+	}
+
+	if len(config.EgressIgnoredPorts) == 1 && config.EgressIgnoredPorts[0] == "" {
+		config.EgressIgnoredPorts = nil
+	}
+
+	if len(config.EgressIgnoredIPs) == 1 && config.EgressIgnoredIPs[0] == "" {
+		config.EgressIgnoredIPs = nil
 	}
 
 	// Validate the format of all fields.
