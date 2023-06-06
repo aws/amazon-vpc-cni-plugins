@@ -77,6 +77,9 @@ func TestValid(t *testing.T) {
 		{
 			name: "valid_with_multiports",
 		},
+		{
+			name: "valid_with_emptyport",
+		},
 	} {
 		t.Run(meta.name, func(t *testing.T) {
 			testValid(t, meta)
@@ -223,7 +226,7 @@ func testValid(t *testing.T, meta testMeta) {
 
 	targetNS.Run(func() error {
 		// Validate IP rules successfully deleted.
-		validateIPRulesDeleted(t)
+		validateIPRulesDeleted(t, netConf)
 		return nil
 	})
 
@@ -255,8 +258,9 @@ func validateIPRules(t *testing.T, netConf *config.NetConfig) {
 	for _, proto := range protocols {
 		iptable, err := iptables.NewWithProtocol(proto)
 		require.NoError(t, err, "Unable to initialize iptable")
-
-		validateIngressIptableRules(t, iptable, netConf)
+		if len(netConf.AppPorts) > 0 && netConf.AppPorts[0] != "" {
+			validateIngressIptableRules(t, iptable, netConf)
+		}
 		validateEgressIptableRules(t, proto, iptable, netConf)
 	}
 }
@@ -297,7 +301,7 @@ func validateEgressIptableRules(t *testing.T, proto iptables.Protocol, iptable *
 	if len(netConf.EgressIgnoredPorts) >= maximumPort {
 		exist, err = iptable.Exists("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports",
 			egressIgnoredMultiports, "-j", "RETURN")
-	} else {
+	} else if len(netConf.EgressIgnoredPorts) > 0 && netConf.EgressIgnoredPorts[0] != "" {
 		exist, err = iptable.Exists("nat", egressChain, "-p", "tcp", "-m", "multiport", "--dports",
 			egressIgnoredPorts, "-j", "RETURN")
 	}
@@ -333,7 +337,7 @@ func validateEgressIptableRules(t *testing.T, proto iptables.Protocol, iptable *
 }
 
 // validateIPRulesDeleted validates IP rules deleted in the target network namespace.
-func validateIPRulesDeleted(t *testing.T) {
+func validateIPRulesDeleted(t *testing.T, netConf *config.NetConfig) {
 	protocols := []iptables.Protocol{iptables.ProtocolIPv4, iptables.ProtocolIPv6}
 
 	for _, proto := range protocols {
@@ -342,8 +346,9 @@ func validateIPRulesDeleted(t *testing.T) {
 
 		chains, err := iptable.ListChains("nat")
 		require.NoError(t, err, "Unable to list 'nat' chains")
-
-		validateIngressIptableRulesDeleted(t, iptable, chains)
+		if len(netConf.AppPorts) > 0 && netConf.AppPorts[0] != "" {
+			validateIngressIptableRulesDeleted(t, iptable, chains)
+		}
 		validateEgressIptableRulesDeleted(t, iptable, chains)
 	}
 }
