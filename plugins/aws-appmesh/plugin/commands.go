@@ -275,7 +275,6 @@ func (plugin *Plugin) deleteIngressRules(
 	iptable *iptables.IPTables,
 	config *config.NetConfig) error {
 
-	// When no app port specified, appPorts field is a string array of length 1 with an empty string element.
 	if len(config.AppPorts) == 0 {
 		return nil
 	}
