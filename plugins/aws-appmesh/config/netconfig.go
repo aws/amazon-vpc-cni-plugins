@@ -143,7 +143,6 @@ func validateConfig(config *netConfigJSON) error {
 	}
 
 	// Validate the format of all fields.
-
 	if err := isValidPort(config.ProxyEgressPort); err != nil {
 		return err
 	}
