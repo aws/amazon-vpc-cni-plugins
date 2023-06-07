@@ -317,7 +317,7 @@ func validateEgressIptableRules(t *testing.T, proto iptables.Protocol, iptable *
 			"-j", "RETURN")
 	}
 
-	if len(netConf.EgressIgnoredPorts) == 0 {
+	if len(netConf.EgressIgnoredIPv4s) == 0 && len(netConf.EgressIgnoredIPv6s) == 0 {
 		require.False(t, exist, "Found unexpected rule for egressIgnoredIPs")
 	} else {
 		require.True(t, exist, "Failed to set egressIgnoredIPs")

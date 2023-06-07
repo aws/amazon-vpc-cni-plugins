@@ -72,7 +72,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	}
 
 	// Validate network configuration.
-	if err := validateConfig(config); err != nil {
+	if err := validateConfig(&config); err != nil {
 		return nil, err
 	}
 
@@ -123,7 +123,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 }
 
 // validateConfig validates network configuration.
-func validateConfig(config netConfigJSON) error {
+func validateConfig(config *netConfigJSON) error {
 	// Validate if all the required fields are present.
 	if config.IgnoredGID == "" && config.IgnoredUID == "" {
 		return fmt.Errorf("missing required parameter ignoredGID or ignoredUID")
@@ -150,10 +150,19 @@ func validateConfig(config netConfigJSON) error {
 		return err
 	}
 
+	// If incoming ports or IP addresses are empty we still treat that as valid and delete that empty element.
+	if len(config.AppPorts) == 1 && config.AppPorts[0] == "" {
+		config.AppPorts = nil
+	}
+
 	for _, port := range config.AppPorts {
 		if err := isValidPort(port); err != nil {
 			return err
 		}
+	}
+
+	if len(config.EgressIgnoredPorts) == 1 && config.EgressIgnoredPorts[0] == "" {
+		config.EgressIgnoredPorts = nil
 	}
 
 	for _, port := range config.EgressIgnoredPorts {
@@ -162,6 +171,9 @@ func validateConfig(config netConfigJSON) error {
 		}
 	}
 
+	if len(config.EgressIgnoredIPs) == 1 && config.EgressIgnoredIPs[0] == "" {
+		config.EgressIgnoredIPs = nil
+	}
 	return nil
 }
 
