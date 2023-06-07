@@ -274,7 +274,6 @@ func (plugin *Plugin) deleteIptablesRules(
 func (plugin *Plugin) deleteIngressRules(
 	iptable *iptables.IPTables,
 	config *config.NetConfig) error {
-
 	if config.ProxyIngressPort == "" {
 		return nil
 	}
