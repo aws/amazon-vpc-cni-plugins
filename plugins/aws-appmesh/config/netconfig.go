@@ -151,7 +151,7 @@ func validateConfig(config *netConfigJSON) error {
 		return err
 	}
 
-	//If incoming ports or ips are empty we still treat that as valid and delete that empty element
+	// If incoming ports or IP addresses are empty we still treat that as valid and delete that empty element.
 	if len(config.AppPorts) == 1 && config.AppPorts[0] == "" {
 		config.AppPorts = nil
 	}
