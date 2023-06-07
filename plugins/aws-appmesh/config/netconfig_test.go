@@ -40,6 +40,10 @@ var (
 		{
 			netConfig: `{"ignoredGID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "appPorts":["1223"]}`,
 		},
+		//This is a temorary test case to cover incoming appPorts with one empty string, it is not an expected senario.
+		{
+			netConfig: `{"ignoredGID":"1337", "proxyIngressPort":"8080", "proxyEgressPort":"8000", "appPorts":[""]}`,
+		},
 		{
 			// no ingress traffic, e.g. batch job.
 			netConfig: `{"ignoredGID":"1337", "proxyEgressPort":"8000"}`,

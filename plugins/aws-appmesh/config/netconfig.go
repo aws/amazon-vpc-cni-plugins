@@ -142,26 +142,22 @@ func validateConfig(config *netConfigJSON) error {
 		return fmt.Errorf("missing parameter appPorts (required if proxyIngressPort is provided)")
 	}
 
-	// For configs coming from appmesh controller, the IngressPort will always be set but the appPort can be empty string with single element
-	// We still treat that as valid and delete that empty element
-	if len(config.AppPorts) == 1 && config.AppPorts[0] == "" {
-		config.AppPorts = nil
-	}
-
-	if len(config.EgressIgnoredPorts) == 1 && config.EgressIgnoredPorts[0] == "" {
-		config.EgressIgnoredPorts = nil
-	}
+	// Validate the format of all fields.
 
 	if len(config.EgressIgnoredIPs) == 1 && config.EgressIgnoredIPs[0] == "" {
 		config.EgressIgnoredIPs = nil
 	}
 
-	// Validate the format of all fields.
 	if err := isValidPort(config.ProxyEgressPort); err != nil {
 		return err
 	}
 	if err := isValidPort(config.ProxyIngressPort); err != nil {
 		return err
+	}
+
+	//If incoming ports or ips are empty we still treat that as valid and delete that empty element
+	if len(config.AppPorts) == 1 && config.AppPorts[0] == "" {
+		config.AppPorts = nil
 	}
 
 	for _, port := range config.AppPorts {
@@ -170,12 +166,19 @@ func validateConfig(config *netConfigJSON) error {
 		}
 	}
 
+	if len(config.EgressIgnoredPorts) == 1 && config.EgressIgnoredPorts[0] == "" {
+		config.EgressIgnoredPorts = nil
+	}
+
 	for _, port := range config.EgressIgnoredPorts {
 		if err := isValidPort(port); err != nil {
 			return err
 		}
 	}
 
+	if len(config.EgressIgnoredPorts) == 1 && config.EgressIgnoredPorts[0] == "" {
+		config.EgressIgnoredPorts = nil
+	}
 	return nil
 }
 

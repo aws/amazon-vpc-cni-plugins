@@ -275,7 +275,7 @@ func (plugin *Plugin) deleteIngressRules(
 	iptable *iptables.IPTables,
 	config *config.NetConfig) error {
 
-	if len(config.AppPorts) == 0 {
+	if config.ProxyIngressPort == "" {
 		return nil
 	}
 
@@ -360,7 +360,6 @@ func forEachSlice(inputPorts []string, maximumPort int, run func([]string) error
 			log.Errorf("multiport limit: %d exceeded, ignoring remaining rules", maximumPort)
 			break
 		}
-
 		portList = append(portList, port)
 	}
 
