@@ -361,12 +361,6 @@ func forEachSlice(inputPorts []string, maximumPort int, run func([]string) error
 			break
 		}
 
-		//There should not be empty string in port list here
-		if len(port) == 0 {
-			log.Warn("Found empty port in portlist, ignoring")
-			continue
-		}
-
 		portList = append(portList, port)
 	}
 
