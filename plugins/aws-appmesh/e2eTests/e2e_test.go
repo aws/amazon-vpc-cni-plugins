@@ -223,7 +223,7 @@ func testValid(t *testing.T, meta testMeta) {
 
 	targetNS.Run(func() error {
 		// Validate IP rules successfully deleted.
-		validateIPRulesDeleted(t, netConf)
+		validateIPRulesDeleted(t)
 		return nil
 	})
 
@@ -255,6 +255,7 @@ func validateIPRules(t *testing.T, netConf *config.NetConfig) {
 	for _, proto := range protocols {
 		iptable, err := iptables.NewWithProtocol(proto)
 		require.NoError(t, err, "Unable to initialize iptable")
+
 		validateIngressIptableRules(t, iptable, netConf)
 		validateEgressIptableRules(t, proto, iptable, netConf)
 	}
