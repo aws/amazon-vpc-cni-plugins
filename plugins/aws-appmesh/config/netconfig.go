@@ -144,10 +144,6 @@ func validateConfig(config *netConfigJSON) error {
 
 	// Validate the format of all fields.
 
-	if len(config.EgressIgnoredIPs) == 1 && config.EgressIgnoredIPs[0] == "" {
-		config.EgressIgnoredIPs = nil
-	}
-
 	if err := isValidPort(config.ProxyEgressPort); err != nil {
 		return err
 	}
@@ -176,8 +172,8 @@ func validateConfig(config *netConfigJSON) error {
 		}
 	}
 
-	if len(config.EgressIgnoredPorts) == 1 && config.EgressIgnoredPorts[0] == "" {
-		config.EgressIgnoredPorts = nil
+if len(config.EgressIgnoredIPs) == 1 && config.EgressIgnoredIPs[0] == "" {
+		config.EgressIgnoredIPs = nil
 	}
 	return nil
 }
