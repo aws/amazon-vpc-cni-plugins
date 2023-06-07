@@ -172,7 +172,7 @@ func validateConfig(config *netConfigJSON) error {
 		}
 	}
 
-if len(config.EgressIgnoredIPs) == 1 && config.EgressIgnoredIPs[0] == "" {
+ if len(config.EgressIgnoredIPs) == 1 && config.EgressIgnoredIPs[0] == "" {
 		config.EgressIgnoredIPs = nil
 	}
 	return nil
