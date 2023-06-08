@@ -28,10 +28,10 @@ import (
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/ecs-serviceconnect/config"
 
-	"github.com/containernetworking/cni/pkg/invoke"
-	"github.com/containernetworking/cni/pkg/skel"
-	"github.com/containernetworking/cni/pkg/types"
-	"github.com/containernetworking/cni/pkg/types/current"
+	cniInvoke "github.com/containernetworking/cni/pkg/invoke"
+	cniSkel "github.com/containernetworking/cni/pkg/skel"
+	cniTypes "github.com/containernetworking/cni/pkg/types"
+	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,6 +40,7 @@ import (
 )
 
 const (
+	cniSpecVersion    = "1.0.0"
 	nsName            = "ecs-sc-testNS"
 	containerID       = "contain-er"
 	ingressChain      = "ECS_SERVICE_CONNECT_INGRESS"
@@ -54,7 +55,7 @@ var (
 // TestValid tests when network configuration is valid.
 func TestValid(t *testing.T) {
 	var err error
-	pluginPath, err = invoke.FindInPath(pluginName, []string{os.Getenv("CNI_PATH")})
+	pluginPath, err = cniInvoke.FindInPath(pluginName, []string{os.Getenv("CNI_PATH")})
 	require.NoError(t, err, fmt.Sprintf("Unable to find %s plugin in path", pluginName))
 
 	testLogDir, preserve := setupLogs(t, "TestValid")
@@ -83,7 +84,7 @@ func TestValid(t *testing.T) {
 // TestInvalid tests when network configuration is invalid.
 func TestInvalid(t *testing.T) {
 	var err error
-	pluginPath, err = invoke.FindInPath(pluginName, []string{os.Getenv("CNI_PATH")})
+	pluginPath, err = cniInvoke.FindInPath(pluginName, []string{os.Getenv("CNI_PATH")})
 	require.NoError(t, err, fmt.Sprintf("Unable to find %s plugin in path", pluginName))
 
 	testLogDir, preserve := setupLogs(t, "TestInValid")
@@ -139,7 +140,7 @@ func loadTestData(t *testing.T, name string) []byte {
 func testValid(t *testing.T, filename string) {
 	netConfData := loadTestData(t, filename)
 	ctx := context.Background()
-	netConf, err := config.New(&skel.CmdArgs{
+	netConf, err := config.New(&cniSkel.CmdArgs{
 		StdinData: netConfData,
 	})
 	require.NoError(t, err, "Unable to create NetConfig object for provided netConf string")
@@ -166,7 +167,7 @@ func testValid(t *testing.T, filename string) {
 	require.NoError(t, err, "Failed to setup interface")
 
 	// Construct args to invoke the CNI plugin with.
-	execInvokeArgs := &invoke.Args{
+	execInvokeArgs := &cniInvoke.Args{
 		ContainerID: containerID,
 		NetNS:       targetNS.GetPath(),
 		IfName:      "test",
@@ -175,7 +176,7 @@ func testValid(t *testing.T, filename string) {
 
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
-	res, err := invoke.ExecPluginWithResult(
+	res, err := cniInvoke.ExecPluginWithResult(
 		ctx,
 		pluginPath,
 		netConfData,
@@ -193,7 +194,7 @@ func testValid(t *testing.T, filename string) {
 
 	// Execute the "DEL" command for the plugin.
 	execInvokeArgs.Command = "DEL"
-	err = invoke.ExecPluginWithoutResult(
+	err = cniInvoke.ExecPluginWithoutResult(
 		ctx,
 		pluginPath,
 		netConfData,
@@ -208,11 +209,11 @@ func testValid(t *testing.T, filename string) {
 	})
 }
 
-func validateResults(t *testing.T, result types.Result) {
+func validateResults(t *testing.T, result cniTypes.Result) {
 	// Test that the plugin passed previous CNI result unmodified.
-	res, err := result.GetAsVersion("0.3.1")
+	res, err := result.GetAsVersion(cniSpecVersion)
 	assert.NoError(t, err, "Unable to parse result")
-	r := res.(*current.Result)
+	r := res.(*cniTypesCurrent.Result)
 	assert.Equal(t, 0, len(r.IPs))
 	assert.Equal(t, 0, len(r.Routes))
 }
@@ -434,7 +435,7 @@ func testInvalid(t *testing.T,
 	defer targetNS.Close()
 
 	// Construct args to invoke the CNI plugin with.
-	execInvokeArgs := &invoke.Args{
+	execInvokeArgs := &cniInvoke.Args{
 		ContainerID: containerID,
 		NetNS:       targetNS.GetPath(),
 		IfName:      "test",
@@ -443,7 +444,7 @@ func testInvalid(t *testing.T,
 
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
-	err = invoke.ExecPluginWithoutResult(
+	err = cniInvoke.ExecPluginWithoutResult(
 		ctx,
 		pluginPath,
 		netConfData,
