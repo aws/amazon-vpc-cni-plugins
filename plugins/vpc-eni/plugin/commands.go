@@ -21,7 +21,7 @@ import (
 	log "github.com/cihub/seelog"
 	cniSkel "github.com/containernetworking/cni/pkg/skel"
 	cniTypes "github.com/containernetworking/cni/pkg/types"
-	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/current"
+	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/100"
 )
 
 // Add is the CNI ADD command handler.
@@ -93,7 +93,6 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		},
 		IPs: []*cniTypesCurrent.IPConfig{
 			{
-				Version:   "4",
 				Interface: cniTypesCurrent.Int(0),
 				Address:   ep.IPAddresses[0],
 				Gateway:   nw.GatewayIPAddresses[0],

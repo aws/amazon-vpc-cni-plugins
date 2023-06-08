@@ -10,6 +10,7 @@
 // on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
+
 package plugin
 
 import (
@@ -28,7 +29,7 @@ const (
 
 var (
 	// specVersions is the set of CNI spec versions supported by this plugin.
-	specVersions = cniVersion.PluginSupports("0.3.0", "0.3.1")
+	specVersions = cniVersion.PluginSupports("0.3.0", "0.3.1", "0.4.0", "1.0.0")
 )
 
 // Plugin represents an ecs-serviceconnect CNI plugin.
