@@ -1,6 +1,6 @@
 {
     "type": "aws-appmesh",
-    "cniVersion": "0.3.0",
+    "cniVersion": "1.0.0",
     "name":"aws-appmesh-cni-plugin",
     "ignoredUID": "1337",
     "ignoredGID": "133",

@@ -1,10 +1,11 @@
 {
     "prevResult": {
+        "cniVersion": "1.0.0",
         "IPs": [{"Version":"4","Address":"10.1.2.3/16"}]
     },
     "type": "aws-appmesh",
-    "cniVersion": "0.3.0",
-    "name":"aws-appmesh-cni-plugin",
+    "cniVersion": "1.0.0",
+    "name":"aws-appmesh-test",
     "ignoredUID": "1337",
     "ignoredGID": "133",
     "proxyEgressPort": "8080",
