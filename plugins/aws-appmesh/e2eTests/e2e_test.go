@@ -26,15 +26,16 @@ import (
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/aws-appmesh/config"
-	"github.com/containernetworking/cni/pkg/invoke"
-	"github.com/containernetworking/cni/pkg/skel"
-	"github.com/containernetworking/cni/pkg/types/current"
+	cniInvoke "github.com/containernetworking/cni/pkg/invoke"
+	cniSkel "github.com/containernetworking/cni/pkg/skel"
+	cniTypesCurrent "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const (
+	cniSpecVersion     = "1.0.0"
 	ingressChain       = "APPMESH_INGRESS"
 	egressChain        = "APPMESH_EGRESS"
 	uid                = "1337"
@@ -112,7 +113,7 @@ func initTest(t *testing.T) {
 	// Ensure that the eni plugin exists.
 	var err error
 
-	pluginPath, err = invoke.FindInPath("aws-appmesh", []string{os.Getenv("CNI_PATH")})
+	pluginPath, err = cniInvoke.FindInPath("aws-appmesh", []string{os.Getenv("CNI_PATH")})
 	require.NoError(t, err, "Unable to find aws-appmesh plugin in path")
 
 	// Create a directory for storing test logs.
@@ -147,7 +148,7 @@ func testInvalid(t *testing.T, meta testMeta) {
 	defer targetNS.Close()
 
 	// Construct args to invoke the CNI plugin with.
-	execInvokeArgs := &invoke.Args{
+	execInvokeArgs := &cniInvoke.Args{
 		ContainerID: containerID,
 		NetNS:       targetNS.GetPath(),
 		IfName:      ifName,
@@ -156,7 +157,7 @@ func testInvalid(t *testing.T, meta testMeta) {
 
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
-	err = invoke.ExecPluginWithoutResult(
+	err = cniInvoke.ExecPluginWithoutResult(
 		ctx,
 		pluginPath,
 		netConfData,
@@ -176,7 +177,7 @@ func testValid(t *testing.T, meta testMeta) {
 	defer targetNS.Close()
 
 	// Construct args to invoke the CNI plugin with.
-	execInvokeArgs := &invoke.Args{
+	execInvokeArgs := &cniInvoke.Args{
 		ContainerID: containerID,
 		NetNS:       targetNS.GetPath(),
 		IfName:      ifName,
@@ -185,7 +186,7 @@ func testValid(t *testing.T, meta testMeta) {
 
 	// Execute the "ADD" command for the plugin.
 	execInvokeArgs.Command = "ADD"
-	res, err := invoke.ExecPluginWithResult(
+	res, err := cniInvoke.ExecPluginWithResult(
 		ctx,
 		pluginPath,
 		netConfData,
@@ -193,16 +194,15 @@ func testValid(t *testing.T, meta testMeta) {
 		nil)
 	require.NoError(t, err, "Unable to execute ADD command for aws-appmesh cni plugin")
 
-	netConf, err := config.New(&skel.CmdArgs{
+	netConf, err := config.New(&cniSkel.CmdArgs{
 		StdinData: netConfData,
 	})
 	require.NoError(t, err, "Unable to create NetConfig object for provided netConf string")
 
 	// Test that the plugin passed previous CNI result unmodified.
-	res031, err := res.GetAsVersion("0.3.1")
+	resCurr, err := res.GetAsVersion(cniSpecVersion)
 	assert.NoError(t, err, "Unable to parse result")
-	result := res031.(*current.Result)
-	assert.Equal(t, "4", result.IPs[0].Version)
+	result := resCurr.(*cniTypesCurrent.Result)
 	assert.Equal(t, "10.1.2.3/16", result.IPs[0].Address.String())
 
 	targetNS.Run(func() error {
@@ -213,7 +213,7 @@ func testValid(t *testing.T, meta testMeta) {
 
 	// Execute the "DEL" command for the plugin.
 	execInvokeArgs.Command = "DEL"
-	err = invoke.ExecPluginWithoutResult(
+	err = cniInvoke.ExecPluginWithoutResult(
 		ctx,
 		pluginPath,
 		netConfData,
@@ -228,7 +228,7 @@ func testValid(t *testing.T, meta testMeta) {
 	})
 
 	// Execute the "DEL" again to make sure DEL is idompotent
-	err = invoke.ExecPluginWithoutResult(
+	err = cniInvoke.ExecPluginWithoutResult(
 		ctx,
 		pluginPath,
 		netConfData,
