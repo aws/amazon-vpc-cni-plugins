@@ -1,7 +1,7 @@
 {
   "type": "ecs-serviceconnect",
   "name": "serviceconnect-cni-test-config",
-  "cniVersion": "0.3.0",
+  "cniVersion": "1.0.0",
   "ingressConfig": [
     {
       "interceptPort": -1,

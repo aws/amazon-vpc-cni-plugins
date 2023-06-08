@@ -35,10 +35,10 @@ There are also some specific Make targets included to help with more directed te
 | ------------------------------ | ------------------------------------------------------------- |
 | `appmesh-unit-test`            | Run only the `aws-appmesh` plugin unit tests                  |
 | `ecs-serviceconnect-unit-test` | Run only the `ecs-serviceconnect` plugin unit tests           |
-| `vpc-branch-eni-e2e-tests`     | Run only the the `vpc-branch-eni` plugin end to end tests     |
-| `vpc-tunnel-e2e-tests`         | Run only the the `vpc-tunnel` plugin end to end tests         |
-| `appmesh-e2e-tests`            | Run only the the `aws-appmesh` plugin end to end tests        |
-| `ecs-serviceconnect-e2e-test`  | Run only the the `ecs-serviceconnect` plugin end to end tests |
+| `vpc-branch-eni-e2e-tests`     | Run only the `vpc-branch-eni` plugin end to end tests         |
+| `vpc-tunnel-e2e-tests`         | Run only the `vpc-tunnel` plugin end to end tests             |
+| `appmesh-e2e-tests`            | Run only the `aws-appmesh` plugin end to end tests            |
+| `ecs-serviceconnect-e2e-test`  | Run only the `ecs-serviceconnect` plugin end to end tests     |
 
 ## Debugging
 
