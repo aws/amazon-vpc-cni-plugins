@@ -30,7 +30,7 @@ const (
 
 var (
 	// specVersions is the set of CNI spec versions supported by this plugin.
-	specVersions = cniVersion.PluginSupports("0.3.0", "0.3.1")
+	specVersions = cniVersion.PluginSupports("0.3.0", "0.3.1", "0.4.0", "1.0.0")
 )
 
 // Plugin represents a vpc-bridge CNI plugin.
