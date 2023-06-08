@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/Microsoft/hcsshim v0.9.4
 	github.com/cihub/seelog v0.0.0-20151216151435-d2c6e5aa9fbf
-	github.com/containernetworking/cni v0.8.1
+	github.com/containernetworking/cni v1.1.2
 	github.com/coreos/go-iptables v0.6.0
 	github.com/stretchr/testify v1.8.2
 	github.com/vishvananda/netlink v1.1.1-0.20210316144550-c21bda41e995
