@@ -198,7 +198,7 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 		HostComputeNetwork: nw.NetworkID,
 		IpConfigurations:   nil,
 		Dns: hcn.Dns{
-			Domain:     strings.Join(nw.DNSSuffixSearchList, ","),
+			Search:     nw.DNSSuffixSearchList,
 			ServerList: nw.DNSServers,
 		},
 		SchemaVersion: hcn.SchemaVersion{
