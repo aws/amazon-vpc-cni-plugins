@@ -26,8 +26,6 @@ import (
 )
 
 const (
-	// Represents Env variable for k8s connector binary path.
-	envK8sConnectorBinaryPath = "AWS_VPC_CNI_K8S_CONNECTOR_BINARY_PATH"
 	// Represents default path for k8s connector binary in EKS Windows AMIs.
 	defaultK8sConnectorBinaryPath = `C:\Program Files\Amazon\EKS\bin\aws-vpc-cni-k8s-connector.exe`
 
@@ -104,11 +102,7 @@ func executeK8sConnector(ctx context.Context, podNamespace string, podName strin
 
 // getK8sConnectorBinaryPath returns path to k8s connector binary.
 func getK8sConnectorBinaryPath() string {
-	connectorBinaryPath := os.Getenv(envK8sConnectorBinaryPath)
-	if connectorBinaryPath == "" {
-		connectorBinaryPath = defaultK8sConnectorBinaryPath
-	}
-	return connectorBinaryPath
+	return defaultK8sConnectorBinaryPath
 }
 
 // getK8sConnectorLogLevel returns the log level for k8s connector binary.
