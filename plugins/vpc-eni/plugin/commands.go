@@ -71,8 +71,10 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	ep := network.Endpoint{
 		ContainerID: args.ContainerID,
 		NetNSName:   args.Netns,
+		ENIName:     args.IfName,
 		MACAddress:  netConfig.ENIMACAddress,
 		IPAddresses: netConfig.ENIIPAddresses,
+		OpState:     netConfig.OpState,
 		BlockIMDS:   netConfig.BlockIMDS,
 	}
 

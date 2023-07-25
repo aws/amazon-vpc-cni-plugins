@@ -42,7 +42,9 @@ type Network struct {
 type Endpoint struct {
 	ContainerID string
 	NetNSName   string
+	ENIName     string
 	MACAddress  net.HardwareAddr
 	IPAddresses []net.IPNet
+	OpState     bool
 	BlockIMDS   bool
 }
