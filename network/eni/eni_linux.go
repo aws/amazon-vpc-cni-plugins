@@ -63,11 +63,18 @@ func (eni *ENI) SetOpState(up bool) error {
 }
 
 // SetNetNS sets the network namespace of the ENI.
+// If ns argument is nil, the ENI is reset to the host network namespace.
 func (eni *ENI) SetNetNS(ns netns.NetNS) error {
 	la := netlink.NewLinkAttrs()
 	la.Name = eni.linkName
 	link := &netlink.Dummy{LinkAttrs: la}
-	return netlink.LinkSetNsFd(link, int(ns.GetFd()))
+	if ns != nil {
+		// Move the ENI to the given network namespace.
+		return netlink.LinkSetNsFd(link, int(ns.GetFd()))
+	} else {
+		// PID 1 init is running in the host network namespace.
+		return netlink.LinkSetNsPid(link, 1)
+	}
 }
 
 // SetMACAddress sets the MAC address of the ENI.

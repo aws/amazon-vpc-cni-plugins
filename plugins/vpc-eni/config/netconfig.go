@@ -32,6 +32,7 @@ type NetConfig struct {
 	ENIMACAddress      net.HardwareAddr
 	ENIIPAddresses     []net.IPNet
 	GatewayIPAddresses []net.IP
+	OpState            bool
 	UseExistingNetwork bool
 	BlockIMDS          bool
 }
@@ -43,6 +44,7 @@ type netConfigJSON struct {
 	ENIMACAddress      string   `json:"eniMACAddress"`
 	ENIIPAddresses     []string `json:"eniIPAddresses"`
 	GatewayIPAddresses []string `json:"gatewayIPAddresses"`
+	OpStateDown        bool     `json:"opStateDown"`
 	UseExistingNetwork bool     `json:"useExistingNetwork"`
 	BlockIMDS          bool     `json:"blockInstanceMetadata"`
 }
@@ -79,6 +81,7 @@ func New(args *cniSkel.CmdArgs) (*NetConfig, error) {
 	netConfig := NetConfig{
 		NetConf:            config.NetConf,
 		ENIName:            config.ENIName,
+		OpState:            !config.OpStateDown,
 		UseExistingNetwork: config.UseExistingNetwork,
 		BlockIMDS:          config.BlockIMDS,
 	}
