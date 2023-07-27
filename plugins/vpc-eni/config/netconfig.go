@@ -40,13 +40,20 @@ type NetConfig struct {
 // netConfigJSON defines the network configuration JSON file format for the vpc-eni plugin.
 type netConfigJSON struct {
 	cniTypes.NetConf
-	ENIName            string   `json:"eniName"`
-	ENIMACAddress      string   `json:"eniMACAddress"`
-	ENIIPAddresses     []string `json:"eniIPAddresses"`
+	// Link name of the ENI (e.g. "eth1")
+	ENIName string `json:"eniName"`
+	// MAC Address of the ENI
+	ENIMACAddress string `json:"eniMACAddress"`
+	// IP Addresses of the ENI
+	ENIIPAddresses []string `json:"eniIPAddresses"`
+	// GatewayIPAddresses for the ENI
 	GatewayIPAddresses []string `json:"gatewayIPAddresses"`
-	OpStateDown        bool     `json:"opStateDown"`
-	UseExistingNetwork bool     `json:"useExistingNetwork"`
-	BlockIMDS          bool     `json:"blockInstanceMetadata"`
+	// If ENI should be left in DOWN operational state in the container netns
+	OpStateDown bool `json:"opStateDown"`
+	// Whether to use an existing container network (only used for Windows)
+	UseExistingNetwork bool `json:"useExistingNetwork"`
+	// Whether to block IMDS access from the container netns
+	BlockIMDS bool `json:"blockInstanceMetadata"`
 }
 
 // New creates a new NetConfig object by parsing the given CNI arguments.

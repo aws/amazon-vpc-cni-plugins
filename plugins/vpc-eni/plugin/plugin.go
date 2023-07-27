@@ -14,9 +14,6 @@
 package plugin
 
 import (
-	"os"
-	"path/filepath"
-
 	"github.com/aws/amazon-vpc-cni-plugins/capabilities"
 	"github.com/aws/amazon-vpc-cni-plugins/cni"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-eni/network"
@@ -60,10 +57,11 @@ func NewPlugin() (*Plugin, error) {
 
 // getLogfilePath returns the path of the log file.
 func getLogfilePath() string {
-	programData, ok := os.LookupEnv("ProgramData")
-	if !ok {
-		programData = `C:\ProgramData`
-	}
+	// programData, ok := os.LookupEnv("ProgramData")
+	// if !ok {
+	// 	programData = `C:\ProgramData`
+	// }
 
-	return filepath.Join(programData, `Amazon\ECS\log\cni\vpc-eni.log`)
+	// return filepath.Join(programData, `Amazon\ECS\log\cni\vpc-eni.log`)
+	return "/log/vpc-cni-eni-plugin.log"
 }

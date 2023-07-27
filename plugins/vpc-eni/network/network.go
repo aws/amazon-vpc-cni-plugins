@@ -42,7 +42,7 @@ type Network struct {
 type Endpoint struct {
 	ContainerID string
 	NetNSName   string
-	ENIName     string
+	ENIName     string // Desired name of the interface in the container netns
 	MACAddress  net.HardwareAddr
 	IPAddresses []net.IPNet
 	OpState     bool
