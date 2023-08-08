@@ -241,6 +241,7 @@ func deleteTestENI(t *testing.T, eniMACAddress net.HardwareAddr) {
 	t.Log("cleaning up test ENI")
 	interfaces, err := net.Interfaces()
 	require.NoError(t, err, "Failed to clean up test ENI")
+	t.Log("listed all interfaces before deleting", interfaces)
 	iface := eni.GetInterfaceByMACAddress(eniMACAddress, interfaces)
 	require.NotNil(t, iface, "Failed to find test ENI by MAC Address")
 	la := netlink.NewLinkAttrs()
