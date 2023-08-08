@@ -227,6 +227,7 @@ func createTestENI(t *testing.T, testENIName string) netlink.Link {
 	require.NoError(t, err, "Failed to create test ENI")
 	link, err := netlink.LinkByName(testENIName)
 	require.NoError(t, err)
+	t.Log("Successfully created a test ENI", testENIName, "MAC Address", link.Attrs().HardwareAddr.String())
 	return link
 }
 
