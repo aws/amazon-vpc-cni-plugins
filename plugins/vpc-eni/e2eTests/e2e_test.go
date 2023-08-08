@@ -228,6 +228,11 @@ func createTestENI(t *testing.T, testENIName string) netlink.Link {
 	link, err := netlink.LinkByName(testENIName)
 	require.NoError(t, err)
 	t.Log("Successfully created a test ENI", testENIName, "MAC Address", link.Attrs().HardwareAddr.String())
+	interfaces, err := net.Interfaces()
+	require.NoError(t, err)
+	t.Log("listed all interfaces", interfaces)
+	iface := eni.GetInterfaceByMACAddress(link.Attrs().HardwareAddr, interfaces)
+	require.NotNil(t, iface, "Failed to find test ENI by MAC Address")
 	return link
 }
 
