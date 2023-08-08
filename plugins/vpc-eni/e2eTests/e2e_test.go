@@ -51,7 +51,9 @@ const (
     "blockInstanceMetadata":true,
     "opState":true
 }`
-	imdsEndpoint = "169.254.169.254/32"
+	imdsEndpoint      = "169.254.169.254/32"
+	eniIPAddress      = "166.0.0.2/16"
+	eniGatewayAddress = "166.0.0.1"
 )
 
 func init() {
@@ -70,21 +72,6 @@ type config struct {
 }
 
 // Tests Add and Del commands for vpc-eni plugin.
-//
-// The Test requires AWS credentials and must be run on an EC2 instance.
-//
-// The test performs the following steps.
-//  1. Request an Elastic Network Interface (ENI) to be created in the EC2 instance's subnet.
-//  2. Wait for the ENI to be created and then request for it to be attached to the instance.
-//  3. Wait for the ENI to be attached to the instance and then fetch its details.
-//  4. Create a new network namespace for testing.
-//  5. Invoke vpc-cni plugin's ADD command from the current network namespace
-//     to configure the test network namespace with the ENI.
-//  6. Verify that two devices (lo and ENI) are present in the test netns.
-//  7. Verify that the ENI is UP in the test netns.
-//  8. Verify that the expected routes are present in the test netns.
-//  9. Invoke vpc-cni plugin's DEL command to tear down the ENI setup from the test netns.
-//  10. Verify that the ENI is no longer in the test netns.
 func TestAddDel(t *testing.T) {
 	testCases := []struct {
 		name                  string
@@ -127,7 +114,7 @@ func TestAddDel(t *testing.T) {
 				netConfENIName = testENIName
 			}
 			netConf := []byte(fmt.Sprintf(netConfFormat,
-				netConfENIName, testENIMACAddress, "166.0.0.2/16", "166.0.0.1"))
+				netConfENIName, testENIMACAddress, eniIPAddress, eniGatewayAddress))
 			t.Logf("Using config: %s", string(netConf))
 
 			// Invoke ADD command on the plugin
