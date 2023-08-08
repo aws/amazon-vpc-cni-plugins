@@ -223,7 +223,8 @@ func createTestENI(t *testing.T, testENIName string) netlink.Link {
 	la := netlink.NewLinkAttrs()
 	la.Name = testENIName
 	t.Log("Adding a new test ENI", la.Name)
-	netlink.LinkAdd(&netlink.Dummy{LinkAttrs: la})
+	err := netlink.LinkAdd(&netlink.Dummy{LinkAttrs: la})
+	require.NoError(t, err, "Failed to create test ENI")
 	link, err := netlink.LinkByName(testENIName)
 	require.NoError(t, err)
 	return link
