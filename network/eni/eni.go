@@ -72,7 +72,7 @@ func (eni *ENI) AttachToLink() error {
 	if err != nil {
 		return err
 	}
-	fmt.Print("Inside the plugin, interfaces are", interfaces)
+	log.Info("Inside the plugin, interfaces are", interfaces)
 
 	if eni.linkName != "" {
 		// Find the interface by name.
