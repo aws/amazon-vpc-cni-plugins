@@ -90,7 +90,7 @@ func TestAddDel(t *testing.T) {
 			t.Log("interfaces before starting the test", interfaces)
 
 			go func() {
-				ticker := time.NewTicker(50 * time.Millisecond)
+				ticker := time.NewTicker(5 * time.Millisecond)
 				for range ticker.C {
 					interfaces, err := net.Interfaces()
 					require.NoError(t, err)
