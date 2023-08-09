@@ -118,7 +118,10 @@ func TestAddDel(t *testing.T) {
 			t.Logf("Using config: %s", string(netConf))
 
 			// Invoke ADD command on the plugin
-			err := invoke.ExecPluginWithoutResult(context.Background(), eniPluginPath,
+			interfaces, err := net.Interfaces()
+			require.NoError(t, err)
+			t.Log("Right before invoking ADD, interfaces are", interfaces)
+			err = invoke.ExecPluginWithoutResult(context.Background(), eniPluginPath,
 				netConf, execInvokeArgs, nil)
 			require.NoError(t, err, "Unable to execute ADD command for vpc-eni plugin")
 
