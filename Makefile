@@ -182,6 +182,10 @@ e2e-test:  $(ALL_SOURCE_FILES) all-binaries
 vpc-branch-eni-e2e-tests: $(ALL_SOURCE_FILES) vpc-branch-eni
 	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 60s ./plugins/vpc-branch-eni/e2eTests/
 
+.PHONY: vpc-eni-e2e-tests
+vpc-eni-e2e-tests: $(ALL_SOURCE_FILES) vpc-eni
+	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 60s ./plugins/vpc-eni/e2eTests/
+
 .PHONY: vpc-tunnel-e2e-tests
 vpc-tunnel-e2e-tests: $(ALL_SOURCE_FILES) vpc-tunnel
 	sudo -E CNI_PATH=$(CUR_DIR)/$(BUILD_DIR) go test -v -tags e2e_test -race -timeout 60s ./plugins/vpc-tunnel/e2eTests/
