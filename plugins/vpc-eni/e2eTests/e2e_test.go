@@ -19,6 +19,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"runtime"
@@ -101,7 +102,7 @@ func TestAddDel(t *testing.T) {
 			targetNS := createTestTargetNS(t)
 			defer targetNS.Close()
 
-			testENIName := "vpc-eni-test"
+			testENIName := fmt.Sprintf("%s-%d", "vpc-eni-test", rand.Intn(100))
 			testENIMACAddress := createTestENI(t, testENIName).Attrs().HardwareAddr
 			defer deleteTestENI(t, testENIMACAddress)
 
