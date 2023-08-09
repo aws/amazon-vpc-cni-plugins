@@ -82,6 +82,7 @@ func (eni *ENI) AttachToLink() error {
 			return err
 		}
 
+		fmt.Print("Inside the plugin, interfaces are", interfaces)
 		iface = GetInterfaceByMACAddress(eni.macAddress, interfaces)
 
 		if iface == nil {
