@@ -24,7 +24,6 @@ import (
 	"runtime"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/containernetworking/cni/pkg/invoke"
@@ -81,24 +80,11 @@ func TestAddDel(t *testing.T) {
 		testENIName           string
 	}{
 		{"without eni name", false, "vpc-eni-test-1"},
-		// {"with eni name", true, "vpc-eni-test-2"},
+		{"with eni name", true, "vpc-eni-test-2"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			interfaces, err := net.Interfaces()
-			require.NoError(t, err)
-			t.Log("interfaces before starting the test", interfaces)
-
-			go func() {
-				ticker := time.NewTicker(500 * time.Millisecond)
-				for range ticker.C {
-					interfaces, err := net.Interfaces()
-					require.NoError(t, err)
-					t.Log("periodic interfaces print", interfaces)
-				}
-			}()
-
 			eniPluginPath := ensureCNIPluginExists(t)
 
 			testLogDir := createTestLogsDir(t)
@@ -116,9 +102,7 @@ func TestAddDel(t *testing.T) {
 			// testENIName := fmt.Sprintf("%s-%d", "vpc-eni-test", rand.Intn(100))
 			testENILink, err := netlink.LinkByName(tc.testENIName)
 			require.NoError(t, err, "test ENI not found: "+tc.testENIName)
-			// testENIMACAddress := createTestENI(t, testENIName).Attrs().HardwareAddr
 			testENIMACAddress := testENILink.Attrs().HardwareAddr
-			// defer deleteTestENI(t, testENIMACAddress)
 
 			// Construct args to invoke the CNI plugin with
 			execInvokeArgs := &invoke.Args{
@@ -237,38 +221,6 @@ func createTestTargetNS(t *testing.T) ns.NetNS {
 	targetNS, err := testutils.NewNS()
 	require.NoError(t, err, "Unable to create a target netns for testing")
 	return targetNS
-}
-
-// Creates a fake test ENI that is actually a dummy interface
-func createTestENI(t *testing.T, testENIName string) netlink.Link {
-	la := netlink.NewLinkAttrs()
-	la.Name = testENIName
-	t.Log("Adding a new test ENI", la.Name)
-	err := netlink.LinkAdd(&netlink.Dummy{LinkAttrs: la})
-	require.NoError(t, err, "Failed to create test ENI")
-	link, err := netlink.LinkByName(testENIName)
-	require.NoError(t, err)
-	t.Log("Successfully created a test ENI", testENIName, "MAC Address", link.Attrs().HardwareAddr.String())
-	interfaces, err := net.Interfaces()
-	require.NoError(t, err)
-	t.Log("listed all interfaces", interfaces)
-	iface := eni.GetInterfaceByMACAddress(link.Attrs().HardwareAddr, interfaces)
-	require.NotNil(t, iface, "Failed to find test ENI by MAC Address")
-	return link
-}
-
-// Deletes a test ENI
-func deleteTestENI(t *testing.T, eniMACAddress net.HardwareAddr) {
-	t.Log("cleaning up test ENI")
-	interfaces, err := net.Interfaces()
-	require.NoError(t, err, "Failed to clean up test ENI")
-	t.Log("listed all interfaces before deleting", interfaces)
-	iface := eni.GetInterfaceByMACAddress(eniMACAddress, interfaces)
-	require.NotNil(t, iface, "Failed to find test ENI by MAC Address")
-	la := netlink.NewLinkAttrs()
-	la.Name = iface.Name
-	t.Log("Deleting test ENI", la.Name)
-	netlink.LinkDel(&netlink.Dummy{LinkAttrs: la})
 }
 
 // getEnvOrDefault gets the value of an env var. It returns the fallback value
