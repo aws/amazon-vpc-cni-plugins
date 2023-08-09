@@ -14,9 +14,11 @@
 package main
 
 import (
+	"net"
 	"os"
 
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-eni/plugin"
+	"github.com/cihub/seelog"
 )
 
 // main is the entry point for vpc-eni plugin executable.
@@ -30,6 +32,9 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
+
+	interfaces, err := net.Interfaces()
+	seelog.Info("After plugin initialization, interfaces are", interfaces)
 
 	cniErr := plugin.Run()
 	if cniErr != nil {
