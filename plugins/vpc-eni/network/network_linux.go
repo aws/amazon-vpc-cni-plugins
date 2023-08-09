@@ -15,6 +15,7 @@ package network
 
 import (
 	"fmt"
+	"net"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/imds"
 	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
@@ -49,6 +50,11 @@ func (nb *NetBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	}
 
 	eni := nw.ENI
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return err
+	}
+	log.Info("Before AttachToLink call", interfaces)
 	err = eni.AttachToLink()
 	if err != nil {
 		log.Errorf("Failed to find ENI %s: %v", eni, err)

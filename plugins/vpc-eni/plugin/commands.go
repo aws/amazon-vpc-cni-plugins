@@ -14,6 +14,8 @@
 package plugin
 
 import (
+	"net"
+
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-eni/config"
 	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-eni/network"
@@ -26,6 +28,12 @@ import (
 
 // Add is the CNI ADD command handler.
 func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return err
+	}
+	log.Info("Beginning add command", interfaces)
+
 	// Parse network configuration.
 	netConfig, err := config.New(args)
 	if err != nil {
@@ -61,11 +69,23 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		UseExisting:         netConfig.UseExistingNetwork,
 	}
 
+	interfaces, err = net.Interfaces()
+	if err != nil {
+		return err
+	}
+	log.Info("Before FindOrCreateNetwork call", interfaces)
+
 	err = nb.FindOrCreateNetwork(&nw)
 	if err != nil {
 		log.Errorf("Failed to create network: %v.", err)
 		return err
 	}
+
+	interfaces, err = net.Interfaces()
+	if err != nil {
+		return err
+	}
+	log.Info("After FindOrCreateNetwork call", interfaces)
 
 	// Find or create the container endpoint on the network.
 	ep := network.Endpoint{
@@ -77,6 +97,12 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		OpState:     netConfig.OpState,
 		BlockIMDS:   netConfig.BlockIMDS,
 	}
+
+	interfaces, err = net.Interfaces()
+	if err != nil {
+		return err
+	}
+	log.Info("Before FindOrCreateEndpoint call", interfaces)
 
 	err = nb.FindOrCreateEndpoint(&nw, &ep)
 	if err != nil {

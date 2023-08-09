@@ -109,9 +109,10 @@ func TestAddDel(t *testing.T) {
 			// Construct args to invoke the CNI plugin with
 			execInvokeArgs := &invoke.Args{
 				Command:     "ADD",
-				ContainerID: containerID, NetNS: targetNS.Path(),
-				IfName: ifName,
-				Path:   os.Getenv("CNI_PATH"),
+				ContainerID: containerID,
+				NetNS:       targetNS.Path(),
+				IfName:      ifName,
+				Path:        os.Getenv("CNI_PATH"),
 			}
 			netConfENIName := ""
 			if tc.shouldPopulateENIName {
