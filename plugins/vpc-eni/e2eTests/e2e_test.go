@@ -104,10 +104,9 @@ func TestAddDel(t *testing.T) {
 			// Construct args to invoke the CNI plugin with
 			execInvokeArgs := &invoke.Args{
 				Command:     "ADD",
-				ContainerID: containerID,
-				NetNS:       targetNS.Path(),
-				IfName:      ifName,
-				Path:        os.Getenv("CNI_PATH"),
+				ContainerID: containerID, NetNS: targetNS.Path(),
+				IfName: ifName,
+				Path:   os.Getenv("CNI_PATH"),
 			}
 			netConfENIName := ""
 			if tc.shouldPopulateENIName {
@@ -126,7 +125,11 @@ func TestAddDel(t *testing.T) {
 			require.NoError(t, err, "Unable to execute ADD command for vpc-eni plugin")
 
 			// Validate the target NetNS
-			targetNS.Do(func(ns.NetNS) error {
+			targetNS.Do(func(nn ns.NetNS) error {
+				t.Log("validating ADD command in netns", nn.Path())
+				interfaces, err := net.Interfaces()
+				require.NoError(t, err, "Failed to clean up test ENI")
+				t.Log("interfaces in", nn.Path(), interfaces)
 				requireLinksCount(t, 2) // lo and ENI
 				requireInterface(t, ifName, testENIMACAddress)
 				validateTargetNSRoutes(t)
