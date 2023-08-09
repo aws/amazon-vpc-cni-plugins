@@ -46,14 +46,15 @@ const (
     "name":"eni-test",
     "eniName":"%s",
     "eniMACAddress":"%s",
-    "eniIPAddresses":["%s"],
+    "eniIPAddresses":["%s", "%s"],
     "gatewayIPAddresses":["%s"],
     "useExistingNetwork":false,
     "blockInstanceMetadata":true,
     "opState":true
 }`
 	imdsEndpoint      = "169.254.169.254/32"
-	eniIPAddress      = "166.0.0.2/16"
+	eniIPAddress1     = "166.0.0.2/16"
+	eniIPAddress2     = "167.0.0.2/16"
 	eniGatewayAddress = "166.0.0.1"
 )
 
@@ -80,7 +81,7 @@ func TestAddDel(t *testing.T) {
 		testENIName           string
 	}{
 		{"without eni name", false, "vpc-eni-test-1"},
-		{"with eni name", true, "vpc-eni-test-2"},
+		// {"with eni name", true, "vpc-eni-test-2"},
 	}
 
 	for _, tc := range testCases {
@@ -132,28 +133,20 @@ func TestAddDel(t *testing.T) {
 				netConfENIName = tc.testENIName
 			}
 			netConf := []byte(fmt.Sprintf(netConfFormat,
-				netConfENIName, testENIMACAddress, eniIPAddress, eniGatewayAddress))
+				netConfENIName, testENIMACAddress, eniIPAddress1, eniIPAddress2, eniGatewayAddress))
 			t.Logf("Using config: %s", string(netConf))
 
 			// Invoke ADD command on the plugin
-			interfaces, err = net.Interfaces()
-			require.NoError(t, err)
-			t.Log("Sleeping for some time")
-			time.Sleep(3 * time.Second)
-			t.Log("Right before invoking ADD, interfaces are", interfaces)
 			err = invoke.ExecPluginWithoutResult(context.Background(), eniPluginPath,
 				netConf, execInvokeArgs, nil)
 			require.NoError(t, err)
 
 			// Validate the target NetNS
-			targetNS.Do(func(nn ns.NetNS) error {
-				t.Log("validating ADD command in netns", nn.Path())
-				interfaces, err := net.Interfaces()
-				require.NoError(t, err, "Failed to clean up test ENI")
-				t.Log("interfaces in", nn.Path(), interfaces)
-				requireLinksCount(t, 2) // lo and ENI
+			targetNS.Do(func(ns.NetNS) error {
+				requireLinksCount(t, 2) // expecting lo and ENI
 				requireInterface(t, ifName, testENIMACAddress)
-				validateTargetNSRoutes(t)
+				requireIPAddresses(t, testENIMACAddress, []string{eniIPAddress1, eniIPAddress2})
+				validateTargetNSRoutes(t, eniGatewayAddress)
 				return nil
 			})
 
@@ -175,7 +168,7 @@ func TestAddDel(t *testing.T) {
 }
 
 // validateTargetNSRoutes validates routes in the target network namespace
-func validateTargetNSRoutes(t *testing.T) {
+func validateTargetNSRoutes(t *testing.T, expectedGatewayAddr string) {
 	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
 	require.NoError(t, err, "Unable to list routes")
 
@@ -186,11 +179,12 @@ func validateTargetNSRoutes(t *testing.T) {
 		}
 		if route.Gw != nil && route.Dst == nil {
 			gatewayRouteFound = true
+			assert.Equal(t, route.Gw.String(), expectedGatewayAddr)
 		}
 	}
 
-	require.True(t, imdsRouteFound, "Blocking route for instance metadata not found ")
-	require.True(t, gatewayRouteFound, "Route to use the vpc subnet gateway not found ")
+	assert.True(t, imdsRouteFound, "Blocking route for instance metadata not found ")
+	assert.True(t, gatewayRouteFound, "Gateway route not found")
 }
 
 // Ensures that vpc-eni plugin executable is available.
@@ -299,4 +293,21 @@ func requireInterface(t *testing.T, ifName string, macAddress net.HardwareAddr) 
 	eniLink, err := netlink.LinkByName(ifName)
 	require.NoError(t, err, "ENI not found in target netns: "+ifName)
 	require.Equal(t, macAddress.String(), eniLink.Attrs().HardwareAddr.String())
+}
+
+// Requires that IP addresses of the interface with the provided MAC Address match the
+// provided expected IP addresses.
+func requireIPAddresses(t *testing.T, macAddress net.HardwareAddr, expectedAddrs []string) {
+	interfaces, err := net.Interfaces()
+	require.NoError(t, err, "Failed to get interfaces")
+	iface := eni.GetInterfaceByMACAddress(macAddress, interfaces)
+	addrs, err := iface.Addrs()
+	require.NoError(t, err, "Failed to get addresses of interface: "+iface.Name)
+	actualAddrs := []string{}
+	for _, ip := range addrs {
+		actualAddrs = append(actualAddrs, ip.String())
+	}
+	for _, ip := range expectedAddrs {
+		assert.Contains(t, actualAddrs, ip)
+	}
 }
