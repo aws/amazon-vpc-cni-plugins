@@ -68,6 +68,12 @@ func (eni *ENI) AttachToLink() error {
 	var iface *net.Interface
 	var err error
 
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return err
+	}
+	fmt.Print("Inside the plugin, interfaces are", interfaces)
+
 	if eni.linkName != "" {
 		// Find the interface by name.
 		iface, err = net.InterfaceByName(eni.linkName)
@@ -82,7 +88,6 @@ func (eni *ENI) AttachToLink() error {
 			return err
 		}
 
-		fmt.Print("Inside the plugin, interfaces are", interfaces)
 		iface = GetInterfaceByMACAddress(eni.macAddress, interfaces)
 
 		if iface == nil {
