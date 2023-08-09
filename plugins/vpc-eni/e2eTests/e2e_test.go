@@ -19,7 +19,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"net"
 	"os"
 	"runtime"
@@ -78,9 +77,10 @@ func TestAddDel(t *testing.T) {
 	testCases := []struct {
 		name                  string
 		shouldPopulateENIName bool
+		testENIName           string
 	}{
-		{"without eni name", false},
-		{"with eni name", true},
+		{"without eni name", false, "vpc-eni-test-1"},
+		{"with eni name", true, "vpc-eni-test-2"},
 	}
 
 	for _, tc := range testCases {
@@ -112,9 +112,12 @@ func TestAddDel(t *testing.T) {
 			targetNS := createTestTargetNS(t)
 			defer targetNS.Close()
 
-			testENIName := fmt.Sprintf("%s-%d", "vpc-eni-test", rand.Intn(100))
-			testENIMACAddress := createTestENI(t, testENIName).Attrs().HardwareAddr
-			defer deleteTestENI(t, testENIMACAddress)
+			// testENIName := fmt.Sprintf("%s-%d", "vpc-eni-test", rand.Intn(100))
+			testENILink, err := netlink.LinkByName(tc.testENIName)
+			require.NoError(t, err, "test ENI not found: "+tc.testENIName)
+			// testENIMACAddress := createTestENI(t, testENIName).Attrs().HardwareAddr
+			testENIMACAddress := testENILink.Attrs().HardwareAddr
+			// defer deleteTestENI(t, testENIMACAddress)
 
 			// Construct args to invoke the CNI plugin with
 			execInvokeArgs := &invoke.Args{
@@ -126,7 +129,7 @@ func TestAddDel(t *testing.T) {
 			}
 			netConfENIName := ""
 			if tc.shouldPopulateENIName {
-				netConfENIName = testENIName
+				netConfENIName = tc.testENIName
 			}
 			netConf := []byte(fmt.Sprintf(netConfFormat,
 				netConfENIName, testENIMACAddress, eniIPAddress, eniGatewayAddress))
