@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
 	"github.com/containernetworking/cni/pkg/invoke"
@@ -87,6 +88,15 @@ func TestAddDel(t *testing.T) {
 			interfaces, err := net.Interfaces()
 			require.NoError(t, err)
 			t.Log("interfaces before starting the test", interfaces)
+
+			go func() {
+				ticker := time.NewTicker(50 * time.Millisecond)
+				for range ticker.C {
+					interfaces, err := net.Interfaces()
+					require.NoError(t, err)
+					t.Log("periodic interfaces print", interfaces)
+				}
+			}()
 
 			eniPluginPath := ensureCNIPluginExists(t)
 
