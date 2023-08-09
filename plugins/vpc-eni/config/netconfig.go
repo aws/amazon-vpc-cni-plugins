@@ -48,7 +48,7 @@ type netConfigJSON struct {
 	ENIIPAddresses []string `json:"eniIPAddresses"`
 	// GatewayIPAddresses for the ENI
 	GatewayIPAddresses []string `json:"gatewayIPAddresses"`
-	// If ENI should be left in DOWN operational state in the container netns
+	// Whether ENI should be left in DOWN operational state in the container netns
 	OpStateDown bool `json:"opStateDown"`
 	// Whether to use an existing container network (only used for Windows)
 	UseExistingNetwork bool `json:"useExistingNetwork"`
