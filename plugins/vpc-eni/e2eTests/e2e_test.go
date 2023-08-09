@@ -83,6 +83,10 @@ func TestAddDel(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			interfaces, err := net.Interfaces()
+			require.NoError(t, err)
+			t.Log("interfaces before starting the test", interfaces)
+
 			eniPluginPath := ensureCNIPluginExists(t)
 
 			testLogDir := createTestLogsDir(t)
@@ -117,12 +121,12 @@ func TestAddDel(t *testing.T) {
 			t.Logf("Using config: %s", string(netConf))
 
 			// Invoke ADD command on the plugin
-			interfaces, err := net.Interfaces()
+			interfaces, err = net.Interfaces()
 			require.NoError(t, err)
 			t.Log("Right before invoking ADD, interfaces are", interfaces)
 			err = invoke.ExecPluginWithoutResult(context.Background(), eniPluginPath,
 				netConf, execInvokeArgs, nil)
-			require.NoError(t, err, "Unable to execute ADD command for vpc-eni plugin")
+			require.NoError(t, err)
 
 			// Validate the target NetNS
 			targetNS.Do(func(nn ns.NetNS) error {
