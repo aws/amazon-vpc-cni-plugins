@@ -90,7 +90,7 @@ func TestAddDel(t *testing.T) {
 			t.Log("interfaces before starting the test", interfaces)
 
 			go func() {
-				ticker := time.NewTicker(5 * time.Millisecond)
+				ticker := time.NewTicker(500 * time.Millisecond)
 				for range ticker.C {
 					interfaces, err := net.Interfaces()
 					require.NoError(t, err)
@@ -135,6 +135,8 @@ func TestAddDel(t *testing.T) {
 			// Invoke ADD command on the plugin
 			interfaces, err = net.Interfaces()
 			require.NoError(t, err)
+			t.Log("Sleeping for some time")
+			time.Sleep(3 * time.Second)
 			t.Log("Right before invoking ADD, interfaces are", interfaces)
 			err = invoke.ExecPluginWithoutResult(context.Background(), eniPluginPath,
 				netConf, execInvokeArgs, nil)
