@@ -22,6 +22,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"syscall"
 	"testing"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
@@ -36,6 +37,7 @@ import (
 const (
 	testENIName1  = "vpc-eni-test-1" // expected to exist on the host
 	testENIName2  = "vpc-eni-test-2" // expected to exist on the host
+	testENIName3  = "vpc-eni-test-3" // expected to exist on the host
 	ifName        = "eni-test-eth0"
 	containerID   = "contain-er"
 	netConfFormat = `
@@ -48,10 +50,11 @@ const (
     "eniIPAddresses":["%s", "%s"],
     "gatewayIPAddresses":["%s"],
     "useExistingNetwork":false,
-    "blockInstanceMetadata":true,
+    "blockInstanceMetadata":%s,
     "opState":true
 }`
-	imdsEndpoint      = "169.254.169.254/32"
+	imdsEndpointIPv4  = "169.254.169.254/32"
+	imdsEndpointIPv6  = "fd00:ec2::254/128"
 	eniIPAddress1     = "166.0.0.2/16"
 	eniIPAddress2     = "167.0.0.2/16"
 	eniGatewayAddress = "166.0.0.1"
@@ -70,11 +73,13 @@ type config struct {
 func TestAddDel(t *testing.T) {
 	testCases := []struct {
 		name                  string
-		shouldPopulateENIName bool
 		testENIName           string
+		shouldPopulateENIName bool
+		shouldBlockIMDS       bool
 	}{
-		{"without eni name", false, testENIName1},
-		{"with eni name", true, testENIName2},
+		{"without eni name", testENIName1, false, true},
+		{"with eni name", testENIName2, true, true},
+		{"allow imds", testENIName3, false, false},
 	}
 
 	for _, tc := range testCases {
@@ -109,8 +114,13 @@ func TestAddDel(t *testing.T) {
 			if tc.shouldPopulateENIName {
 				netConfENIName = tc.testENIName
 			}
+			blockInstanceMetadata := "false"
+			if tc.shouldBlockIMDS {
+				blockInstanceMetadata = "true"
+			}
 			netConf := []byte(fmt.Sprintf(netConfFormat,
-				netConfENIName, testENIMACAddress, eniIPAddress1, eniIPAddress2, eniGatewayAddress))
+				netConfENIName, testENIMACAddress, eniIPAddress1, eniIPAddress2,
+				eniGatewayAddress, blockInstanceMetadata))
 			t.Logf("Using config: %s", string(netConf))
 
 			// Invoke ADD command on the plugin
@@ -123,7 +133,11 @@ func TestAddDel(t *testing.T) {
 				requireLinksCount(t, 2) // expecting lo and ENI
 				requireInterface(t, ifName, testENIMACAddress)
 				requireIPAddresses(t, testENIMACAddress, []string{eniIPAddress1, eniIPAddress2})
-				validateTargetNSRoutes(t, eniGatewayAddress)
+				assertGatewayRoute(t, eniGatewayAddress)
+				if tc.shouldBlockIMDS {
+					assertIMDSBlockedV4(t)
+					assertIMDSBlockedV6(t)
+				}
 				return nil
 			})
 
@@ -144,24 +158,47 @@ func TestAddDel(t *testing.T) {
 	}
 }
 
-// validateTargetNSRoutes validates routes in the target network namespace
-func validateTargetNSRoutes(t *testing.T, expectedGatewayAddr string) {
+// Asserts that a gateway route exists and matces expected gateway address.
+func assertGatewayRoute(t *testing.T, expectedGatewayAddr string) {
 	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
 	require.NoError(t, err, "Unable to list routes")
-
-	var imdsRouteFound, gatewayRouteFound bool
+	var gatewayRoute netlink.Route
 	for _, route := range routes {
-		if route.Gw == nil && route.Dst.String() == imdsEndpoint {
-			imdsRouteFound = true
-		}
 		if route.Gw != nil && route.Dst == nil {
-			gatewayRouteFound = true
-			assert.Equal(t, route.Gw.String(), expectedGatewayAddr)
+			gatewayRoute = route
 		}
 	}
+	assert.Equal(t, gatewayRoute.Gw.String(), expectedGatewayAddr)
+}
 
-	assert.True(t, imdsRouteFound, "Blocking route for instance metadata not found ")
-	assert.True(t, gatewayRouteFound, "Gateway route not found")
+// Asserts that IMDS via IPv4 is blocked
+func assertIMDSBlockedV4(t *testing.T) {
+	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
+	require.NoError(t, err, "Unable to list routes")
+	var imdsRoute *netlink.Route
+	for _, route := range routes {
+		if route.Dst.String() == imdsEndpointIPv4 {
+			imdsRoute = &route
+			break
+		}
+	}
+	require.NotNil(t, imdsRoute, "IMDS v4 block route not found")
+	assert.Equal(t, syscall.RTN_BLACKHOLE, imdsRoute.Type, "IMDS IPv4 route is not blocked")
+}
+
+// Asserts that IMDS via IPv6 is blocked
+func assertIMDSBlockedV6(t *testing.T) {
+	routes, err := netlink.RouteList(nil, netlink.FAMILY_V6)
+	require.NoError(t, err, "Unable to list routes")
+	var imdsRoute *netlink.Route
+	for _, route := range routes {
+		if route.Dst.String() == imdsEndpointIPv6 {
+			imdsRoute = &route
+			break
+		}
+	}
+	require.NotNil(t, imdsRoute, "IMDS v6 block route not found")
+	assert.Equal(t, syscall.RTN_BLACKHOLE, imdsRoute.Type, "IMDS IPv6 route is not blocked")
 }
 
 // Ensures that vpc-eni plugin executable is available.
