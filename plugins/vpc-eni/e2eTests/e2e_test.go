@@ -134,10 +134,8 @@ func TestAddDel(t *testing.T) {
 				requireInterface(t, ifName, testENIMACAddress)
 				requireIPAddresses(t, testENIMACAddress, []string{eniIPAddress1, eniIPAddress2})
 				assertGatewayRoute(t, eniGatewayAddress)
-				if tc.shouldBlockIMDS {
-					assertIMDSBlockedV4(t)
-					assertIMDSBlockedV6(t)
-				}
+				assertIMDSV4(t, tc.shouldBlockIMDS)
+				assertIMDSV6(t, tc.shouldBlockIMDS)
 				return nil
 			})
 
@@ -171,8 +169,8 @@ func assertGatewayRoute(t *testing.T, expectedGatewayAddr string) {
 	assert.Equal(t, gatewayRoute.Gw.String(), expectedGatewayAddr)
 }
 
-// Asserts that IMDS via IPv4 is blocked
-func assertIMDSBlockedV4(t *testing.T) {
+// Assertions for IMDS via IPv4
+func assertIMDSV4(t *testing.T, shouldBeBlocked bool) {
 	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
 	require.NoError(t, err, "Unable to list routes")
 	var imdsRoute *netlink.Route
@@ -182,12 +180,16 @@ func assertIMDSBlockedV4(t *testing.T) {
 			break
 		}
 	}
-	require.NotNil(t, imdsRoute, "IMDS v4 block route not found")
-	assert.Equal(t, syscall.RTN_BLACKHOLE, imdsRoute.Type, "IMDS IPv4 route is not blocked")
+	if shouldBeBlocked {
+		require.NotNil(t, imdsRoute, "IMDS v4 block route not found")
+		assert.Equal(t, syscall.RTN_BLACKHOLE, imdsRoute.Type, "IMDS IPv4 route is not blocked")
+	} else {
+		assert.Nil(t, imdsRoute, "No route is expected for IMDS if it shouldn't be blocked")
+	}
 }
 
-// Asserts that IMDS via IPv6 is blocked
-func assertIMDSBlockedV6(t *testing.T) {
+// Assertions for IMDS via IPv6
+func assertIMDSV6(t *testing.T, shouldBeBlocked bool) {
 	routes, err := netlink.RouteList(nil, netlink.FAMILY_V6)
 	require.NoError(t, err, "Unable to list routes")
 	var imdsRoute *netlink.Route
@@ -197,8 +199,12 @@ func assertIMDSBlockedV6(t *testing.T) {
 			break
 		}
 	}
-	require.NotNil(t, imdsRoute, "IMDS v6 block route not found")
-	assert.Equal(t, syscall.RTN_BLACKHOLE, imdsRoute.Type, "IMDS IPv6 route is not blocked")
+	if shouldBeBlocked {
+		require.NotNil(t, imdsRoute, "IMDS v6 block route not found")
+		assert.Equal(t, syscall.RTN_BLACKHOLE, imdsRoute.Type, "IMDS IPv6 route is not blocked")
+	} else {
+		assert.Nil(t, imdsRoute, "No route is expected for IMDS if it shouldn't be blocked")
+	}
 }
 
 // Ensures that vpc-eni plugin executable is available.
