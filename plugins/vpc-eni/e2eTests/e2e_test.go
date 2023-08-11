@@ -24,11 +24,11 @@ import (
 	"strconv"
 	"syscall"
 	"testing"
+	"time"
 
-	"github.com/aws/amazon-vpc-cni-plugins/network/eni"
+	"github.com/aws/amazon-vpc-cni-plugins/network/netns"
+	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
 	"github.com/containernetworking/cni/pkg/invoke"
-	"github.com/containernetworking/plugins/pkg/ns"
-	"github.com/containernetworking/plugins/pkg/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
@@ -106,7 +106,7 @@ func TestAddDel(t *testing.T) {
 			execInvokeArgs := &invoke.Args{
 				Command:     "ADD",
 				ContainerID: containerID,
-				NetNS:       targetNS.Path(),
+				NetNS:       targetNS.GetPath(),
 				IfName:      ifName,
 				Path:        os.Getenv("CNI_PATH"),
 			}
@@ -129,7 +129,7 @@ func TestAddDel(t *testing.T) {
 			require.NoError(t, err)
 
 			// Validate the target NetNS
-			targetNS.Do(func(ns.NetNS) error {
+			targetNS.Run(func() error {
 				requireLinksCount(t, 2) // expecting lo and ENI
 				requireInterface(t, ifName, testENIMACAddress)
 				requireIPAddresses(t, testENIMACAddress, []string{eniIPAddress1, eniIPAddress2})
@@ -146,7 +146,7 @@ func TestAddDel(t *testing.T) {
 			require.NoError(t, err, "Unable to execute DEL command for vpc-eni plugin")
 
 			// Validate the target NetNS
-			targetNS.Do(func(ns.NetNS) error {
+			targetNS.Run(func() error {
 				// Validate that the ENI is no longer in the target netns
 				_, err := netlink.LinkByName(ifName)
 				assert.EqualError(t, err, "Link not found")
@@ -253,8 +253,8 @@ func cleanupLogsIfNeeded(t *testing.T, testLogDir string) {
 }
 
 // Creates a target netns for testing
-func createTestTargetNS(t *testing.T) ns.NetNS {
-	targetNS, err := testutils.NewNS()
+func createTestTargetNS(t *testing.T) netns.NetNS {
+	targetNS, err := netns.NewNetNS(fmt.Sprintf("eni-test-ns-%d", time.Now().UnixMilli()))
 	require.NoError(t, err, "Unable to create a target netns for testing")
 	return targetNS
 }
@@ -288,7 +288,7 @@ func requireInterface(t *testing.T, ifName string, macAddress net.HardwareAddr) 
 func requireIPAddresses(t *testing.T, macAddress net.HardwareAddr, expectedAddrs []string) {
 	interfaces, err := net.Interfaces()
 	require.NoError(t, err, "Failed to get interfaces")
-	iface := eni.GetInterfaceByMACAddress(macAddress, interfaces)
+	iface := getInterfaceByMACAddress(macAddress, interfaces)
 	addrs, err := iface.Addrs()
 	require.NoError(t, err, "Failed to get addresses of interface: "+iface.Name)
 	actualAddrs := []string{}
@@ -298,4 +298,21 @@ func requireIPAddresses(t *testing.T, macAddress net.HardwareAddr, expectedAddrs
 	for _, ip := range expectedAddrs {
 		assert.Contains(t, actualAddrs, ip)
 	}
+}
+
+// getInterfaceByMACAddress returns the interface with the specified MAC address.
+func getInterfaceByMACAddress(macAddress net.HardwareAddr, interfaces []net.Interface) *net.Interface {
+	var chosenInterface *net.Interface
+
+	// If there are multiple matches, pick the one with the shortest name.
+	for i := 0; i < len(interfaces); i++ {
+		iface := &interfaces[i]
+		if vpc.CompareMACAddress(iface.HardwareAddr, macAddress) {
+			if chosenInterface == nil || len(chosenInterface.Name) > len(iface.Name) {
+				chosenInterface = iface
+			}
+		}
+	}
+
+	return chosenInterface
 }

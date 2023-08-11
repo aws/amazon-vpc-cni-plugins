@@ -82,7 +82,7 @@ func (eni *ENI) AttachToLink() error {
 			return err
 		}
 
-		iface = GetInterfaceByMACAddress(eni.macAddress, interfaces)
+		iface = getInterfaceByMACAddress(eni.macAddress, interfaces)
 
 		if iface == nil {
 			log.Errorf("Failed to find an interface with MAC address %s.", eni.macAddress)
@@ -103,8 +103,8 @@ func (eni *ENI) DetachFromLink() error {
 	return nil
 }
 
-// GetInterfaceByMACAddress returns the interface with the specified MAC address.
-func GetInterfaceByMACAddress(macAddress net.HardwareAddr, interfaces []net.Interface) *net.Interface {
+// getInterfaceByMACAddress returns the interface with the specified MAC address.
+func getInterfaceByMACAddress(macAddress net.HardwareAddr, interfaces []net.Interface) *net.Interface {
 	var chosenInterface *net.Interface
 
 	// If there are multiple matches, pick the one with the shortest name.

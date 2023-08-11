@@ -49,7 +49,7 @@ func TestGetInterfaceByMacAddress(t *testing.T) {
 		},
 	}
 
-	chosenInterface := GetInterfaceByMACAddress(mac1, interfaces)
+	chosenInterface := getInterfaceByMACAddress(mac1, interfaces)
 	assert.NotNil(t, chosenInterface)
 	assert.Equal(t, "eth1", chosenInterface.Name)
 }
