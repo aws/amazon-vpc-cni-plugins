@@ -40,7 +40,7 @@ const (
 	geneveIPv4Address  = "169.254.0.1/31"
 	gatewayIPv4Address = "169.254.0.0"
 	destinationIP      = "10.0.2.129"
-	trunkName          = "eth1"
+	trunkName          = "eth3"
 	destinationPort    = 6081
 	primary            = "true"
 	netConfJsonFmt     = `

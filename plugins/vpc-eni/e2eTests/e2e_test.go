@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"net"
 	"os"
@@ -97,6 +98,9 @@ func TestAddDel(t *testing.T) {
 
 			targetNS := createTestTargetNS(t)
 			defer targetNS.Close()
+
+			testENI := createTestInterface(t, tc.testENIName)
+			defer deleteTestInterface(t, testENI.Attrs().HardwareAddr)
 
 			testENILink, err := netlink.LinkByName(tc.testENIName)
 			require.NoError(t, err, "test ENI not found: "+tc.testENIName)
@@ -315,4 +319,59 @@ func getInterfaceByMACAddress(macAddress net.HardwareAddr, interfaces []net.Inte
 	}
 
 	return chosenInterface
+}
+
+// Creates a test (dummy) network interface
+func createTestInterface(t *testing.T, linkName string) netlink.Link {
+	t.Log("Creating test ENI", linkName)
+
+	macAddr, err := generateMACAddress()
+	require.NoError(t, err, "Failed to generate MAC Address for test ENI")
+
+	la := netlink.NewLinkAttrs()
+	la.Name = linkName
+	la.HardwareAddr = macAddr
+	err = netlink.LinkAdd(&netlink.Dummy{LinkAttrs: la})
+	require.NoError(t, err, "Failed to create test ENI")
+
+	link, err := netlink.LinkByName(linkName)
+	require.NoError(t, err, "Failed to find test ENI by name after creation")
+	t.Log("Created test ENI", link)
+
+	return link
+}
+
+// generateMACAddress generates a random locally-administrated MAC address.
+func generateMACAddress() (net.HardwareAddr, error) {
+	buf := make([]byte, 6)
+	var mac net.HardwareAddr
+
+	_, err := rand.Read(buf)
+	if err != nil {
+		return mac, err
+	}
+
+	// Set locally administered addresses bit and reset multicast bit
+	buf[0] = (buf[0] | 0x02) & 0xfe
+	mac = append(mac, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5])
+	return mac, nil
+}
+
+// Deletes test ENI
+func deleteTestInterface(t *testing.T, macAddress net.HardwareAddr) {
+	// Find the interface by MAC address
+	t.Log("Looking up test ENI with mac address", macAddress)
+	interfaces, err := net.Interfaces()
+	require.NoError(t, err, "Failed to get interfaces")
+	iface := getInterfaceByMACAddress(macAddress, interfaces)
+	require.NotNil(t, iface, fmt.Sprintf(
+		"An interface with mac address %s was not found: %v", macAddress, interfaces))
+	t.Log("Found test ENI for deletion", iface.Name)
+
+	// Delete the interface
+	link, err := netlink.LinkByName(iface.Name)
+	require.NoError(t, err, "Failed to find link to delete", iface.Name)
+	err = netlink.LinkDel(link)
+	require.NoError(t, err, "Failed to delete test ENI", iface.Name)
+	t.Log("Deleted test ENI", link.Attrs().Name)
 }
