@@ -128,7 +128,7 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	// If existing network is to be used then ENI is not required.
 	if !netConfig.UseExistingNetwork {
 		// Find the ENI.
-		vpcENI, err = eni.NewENI(netConfig.ENIName, netConfig.ENIMACAddress)
+		vpcENI, err = eni.NewENI(args.IfName, netConfig.ENIMACAddress)
 		if err != nil {
 			log.Errorf("Failed to find ENI %s: %v.", netConfig.ENIName, err)
 			return err
