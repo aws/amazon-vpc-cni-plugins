@@ -341,7 +341,7 @@ func createTestInterface(t *testing.T, linkName string) netlink.Link {
 	return link
 }
 
-// generateMACAddress generates a random locally-administrated MAC address.
+// generateMACAddress generates a random MAC address.
 func generateMACAddress() (net.HardwareAddr, error) {
 	buf := make([]byte, 6)
 	var mac net.HardwareAddr
