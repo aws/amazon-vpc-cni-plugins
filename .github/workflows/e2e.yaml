@@ -29,9 +29,9 @@ jobs:
           sudo ip link set dev eth2 mtu 9001
           sudo ip link set dev eth2 up
           ip link show
-          sudo ip link add vpc-eni-test-1 type dummy
-          sudo ip link add vpc-eni-test-2 type dummy
-          sudo ip link add vpc-eni-test-3 type dummy
+          sudo ip link add eth3 type dummy
+          sudo ip link set dev eth3 mtu 9001
+          sudo ip link set dev eth3 up
           ip link show
       - name: test
         run: make e2e-test
