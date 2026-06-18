@@ -55,6 +55,7 @@ ALL_SOURCE_FILES := $(shell find . -name '*.go')
 vpc-eni: $(BUILD_DIR)/vpc-eni
 vpc-branch-eni: $(BUILD_DIR)/vpc-branch-eni
 vpc-bridge: $(BUILD_DIR)/vpc-bridge
+vpc-bridge-windows: $(BUILD_DIR)/vpc-bridge-windows
 vpc-tunnel: $(BUILD_DIR)/vpc-tunnel
 aws-appmesh: $(BUILD_DIR)/aws-appmesh
 ecs-serviceconnect: $(BUILD_DIR)/ecs-serviceconnect
@@ -99,6 +100,19 @@ $(BUILD_DIR)/vpc-bridge: $(VPC_BRIDGE_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES
 		-o $(BUILD_DIR)/vpc-bridge \
 		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-bridge
 	@echo "Built vpc-bridge plugin."
+
+# Build the vpc-bridge CNI plugin.
+$(BUILD_DIR)/vpc-bridge-windows: $(VPC_BRIDGE_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
+	go build \
+		-installsuffix cgo \
+		-v \
+		-tags enablek8sconnector,windows \
+		$(BUILD_FLAGS) \
+		-ldflags $(LINKER_FLAGS) \
+		-o $(BUILD_DIR)/vpc-bridge.exe \
+		github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-bridge
+	@echo "Built vpc-bridge (Windows) plugin."
 
 # Build the vpc-tunnel CNI plugin.
 $(BUILD_DIR)/vpc-tunnel: $(VPC_TUNNEL_PLUGIN_SOURCE_FILES) $(COMMON_SOURCE_FILES)
