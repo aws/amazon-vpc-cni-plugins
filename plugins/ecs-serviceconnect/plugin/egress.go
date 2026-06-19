@@ -312,6 +312,10 @@ func (plugin *Plugin) deleteRedirectionIP(proto iptables.Protocol, conf *config.
 	}
 	routes, err := handle.RouteListFiltered(plugin.getRuleFamily(proto), route,
 		netlink.RT_FILTER_DST|netlink.RT_FILTER_GW)
+	if err != nil {
+		log.Errorf("Unable to get route list: %v, err")
+		return err
+	}
 	for _, r := range routes {
 		routeToBeDeleted := r
 		if err = netlink.RouteDel(&routeToBeDeleted); err != nil {
@@ -356,6 +360,10 @@ func (plugin *Plugin) deleteDefaultTproxyRoute(proto iptables.Protocol,
 	}
 	routes, err := handle.RouteListFiltered(plugin.getRuleFamily(proto), route,
 		netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
+	if err != nil {
+		log.Errorf("Unable to get route list: %v, err")
+		return err
+	}
 	for _, r := range routes {
 		routeToBeDeleted := r
 		if err = netlink.RouteDel(&routeToBeDeleted); err != nil {
